@@ -1,3 +1,5 @@
+#pragma once
+
 #include "codegen/code_context.h"
 #include "codegen/codegen.h"
 #include "codegen/function_builder.h"

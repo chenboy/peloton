@@ -33,7 +33,7 @@ TEST_F(UDFTest, SimpleExpressionTest) {
 
   TestingSQLUtil::ExecuteSQLQuery(
       "CREATE OR REPLACE FUNCTION increment(i double)"
-      " RETURNS double AS $$ BEGIN RETURN i + 1; END;"
+      " RETURNS double AS $$ \n BEGIN RETURN i + 1; END;"
       " $$ LANGUAGE plpgsql;");
 
   TestingSQLUtil::ExecuteSQLQuery("CREATE TABLE foo(income double);");

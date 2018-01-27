@@ -1,3 +1,4 @@
+#include "udf/plpgsql_parser.h"
 #include "udf/udf_handler.h"
 
 namespace peloton {
@@ -82,10 +83,21 @@ std::shared_ptr<codegen::CodeContext> UDFHandler::Compile(
                               llvm_args};
 
   // Construct UDF Parser Object
-  std::unique_ptr<UDFParser> parser(new UDFParser(txn));
+  // std::unique_ptr<UDFParser> parser(new UDFParser(txn));
 
   // Parse UDF and generate the AST
-  parser->ParseUDF(cg, fb, func_body, func_name, args_type);
+  // parser->ParseUDF(cg, fb, func_body, func_name, args_type);
+  PLpgSQLParser parser(func_name, args_type);
+  LOG_DEBUG("func_body : %s", func_body.c_str());
+  auto func = parser.ParsePLpgSQL(func_body);
+  PL_ASSERT(func != nullptr);
+  if (auto *func_ptr = func->Codegen(cg, fb)) {
+    // Required for referencing from Peloton code
+    code_context->SetUDF(func_ptr);
+
+    // To check correctness of the codegened UDF
+    func_ptr->dump();
+  }
 
   // Optimize and JIT compile all functions created in this context
   code_context->Compile();

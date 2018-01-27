@@ -1,6 +1,5 @@
 #include <sstream>
 
-
 #include "udf/plpgsql_parser.h"
 
 #include "common/exception.h"
@@ -10,10 +9,12 @@ namespace peloton {
 
 namespace udf {
 
-const std::string kFunctionList = "\"FunctionList\"";
+const std::string kFunctionList = "FunctionList";
 const std::string kAction = "action";
+const std::string kDatums = "datums";
 const std::string kPLpgSQL_function = "PLpgSQL_function";
 const std::string kBody = "body";
+const std::string kPLpgSQL_stmt_block = "PLpgSQL_stmt_block";
 const std::string kPLpgSQL_stmt_return = "PLpgSQL_stmt_return";
 const std::string kPLpgSQL_stmt_if = "PLpgSQL_stmt_if";
 const std::string kCond = "cond";
@@ -27,14 +28,14 @@ std::unique_ptr<FunctionAST> PLpgSQLParser::ParsePLpgSQL(
     std::string func_body) {
   auto result = pg_query_parse_plpgsql(func_body.c_str());
   if (result.error) {
+    LOG_DEBUG("PL/pgSQL parse error : %s", result.error->message);
+    pg_query_free_plpgsql_parse_result(result);
     throw Exception("PL/pgSQL parsing error : " +
                     std::string(result.error->message));
-    pg_query_free_plpgsql_parse_result(result);
-    return nullptr;
   }
   // The result is a list, we need to wrap it
-  std::string ast_json_str =
-      "{" + kFunctionList + " : " + std::string(result.plpgsql_funcs) + "}";
+  std::string ast_json_str = "{ \"" + kFunctionList + "\" : " +
+                             std::string(result.plpgsql_funcs) + " }";
   LOG_DEBUG("Compiling JSON formatted function %s", ast_json_str.c_str());
   pg_query_free_plpgsql_parse_result(result);
 
@@ -42,10 +43,13 @@ std::unique_ptr<FunctionAST> PLpgSQLParser::ParsePLpgSQL(
   Json::Value ast_json;
   ss >> ast_json;
   const auto function_list = ast_json[kFunctionList];
+  PL_ASSERT(function_list.isArray());
   if (function_list.size() != 1) {
+    LOG_DEBUG("PL/pgSQL error : Function list size %u", function_list.size());
     throw Exception("Function list has size other than 1");
   }
-  const auto function_body = function_list[0][kPLpgSQL_function][kBody];
+  const auto function_body =
+      function_list[0][kPLpgSQL_function][kAction][kPLpgSQL_stmt_block][kBody];
   std::unique_ptr<FunctionAST> function_ast(
       new FunctionAST(ParseBlock(function_body)));
   return function_ast;
@@ -53,6 +57,8 @@ std::unique_ptr<FunctionAST> PLpgSQLParser::ParsePLpgSQL(
 
 std::unique_ptr<ExprAST> PLpgSQLParser::ParseBlock(const Json::Value block) {
   // TODO(boweic): Support statements size other than 1
+  LOG_DEBUG("Parsing Function Block");
+  PL_ASSERT(block.isArray());
   if (block.size() != 1) {
     throw Exception(
         "PL/pgSQL parser : Block size other than 1 is not supported");
@@ -72,6 +78,7 @@ std::unique_ptr<ExprAST> PLpgSQLParser::ParseBlock(const Json::Value block) {
 }
 
 std::unique_ptr<ExprAST> PLpgSQLParser::ParseIf(const Json::Value branch) {
+  LOG_DEBUG("ParseIf");
   auto cond_expr =
       ParseExprSQL(branch[kCond][kPLpgSQL_expr][kQuery].asString());
   auto then_stmt = ParseBlock(branch[kThenBody]);
@@ -82,10 +89,11 @@ std::unique_ptr<ExprAST> PLpgSQLParser::ParseIf(const Json::Value branch) {
 
 std::unique_ptr<ExprAST> PLpgSQLParser::ParseExprSQL(
     const std::string expr_sql_str) {
-  parser::PostgresParser parser;
-  auto &stmts = parser.BuildParseTree(expr_sql_str.c_str())->GetStatements();
-  PL_ASSERT(stmts.size() == 1);
-  auto stmt = stmts[0].get();
+  LOG_DEBUG("Parsing Expr SQL : %s", expr_sql_str.c_str());
+  auto &parser = parser::PostgresParser::GetInstance();
+  auto stmt_list = parser.BuildParseTree(expr_sql_str.c_str());
+  PL_ASSERT(stmt_list->GetNumStatements() == 1);
+  auto stmt = stmt_list->GetStatement(0);
   PL_ASSERT(stmt->GetType() == StatementType::SELECT);
   PL_ASSERT(reinterpret_cast<parser::SelectStatement *>(stmt)->from_table ==
             nullptr);
