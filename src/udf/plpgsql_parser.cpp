@@ -59,13 +59,14 @@ std::unique_ptr<ExprAST> PLpgSQLParser::ParseBlock(const Json::Value block) {
   // TODO(boweic): Support statements size other than 1
   LOG_DEBUG("Parsing Function Block");
   PL_ASSERT(block.isArray());
-  if (block.size() != 1) {
+  if (block.size() == 0) {
     throw Exception(
-        "PL/pgSQL parser : Block size other than 1 is not supported");
+        "PL/pgSQL parser : Empty block is not supported");
   }
   const auto stmt = block[0];
   const auto stmt_names = stmt.getMemberNames();
   PL_ASSERT(stmt_names.size() == 1);
+  LOG_DEBUG("Statemnt : %s", stmt_names[0].c_str());
   if (stmt_names[0] == kPLpgSQL_stmt_return) {
     // TODO(boweic): Build an ast for return node
     return ParseExprSQL(
