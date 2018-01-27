@@ -1,6 +1,7 @@
 #ifndef PG_QUERY_H
 #define PG_QUERY_H
 
+#include "postgres.h"
 #include "pg_list.h"
 
 typedef struct {

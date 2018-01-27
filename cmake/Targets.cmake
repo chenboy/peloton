@@ -89,7 +89,7 @@ function(peloton_pickup_peloton_sources root)
   file(GLOB_RECURSE jsoncpp_srcs ${root}/third_party/jsoncpp/*.cpp)
 
   # date
-  file(GLOB_RECURSE jsoncpp_srcs ${root}/third_party/date/*.cpp)
+  file(GLOB_RECURSE datecpp_srcs ${root}/third_party/date/*.cpp)
   set(date_hdrs ${root}/third_party/date/)
   include_directories(SYSTEM "${date_hdrs}")
 
