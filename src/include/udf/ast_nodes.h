@@ -13,7 +13,7 @@
 
 namespace peloton {
 namespace udf {
-
+// TODO(boweic): naming convention
 using arg_type = type::TypeId;
 
 // ExprAST - Base class for all expression nodes.
