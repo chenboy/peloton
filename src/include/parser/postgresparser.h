@@ -174,7 +174,7 @@ class PostgresParser {
 
   // tansform helper for create function statements
   static parser::SQLStatement *CreateFunctionTransform(
-      CreateFunctionStmt *root);
+      CreateFunctionStmt *root, const char *query_string = nullptr);
 
   // transform helper for function parameters
   static parser::FuncParameter *FunctionParameterTransform(
@@ -195,7 +195,8 @@ class PostgresParser {
    * @param Postgres CreateDatabaseStmt parsenode
    * @return a peloton CreateStatement node
    */
-  static parser::SQLStatement *CreateDatabaseTransform(CreateDatabaseStmt *root);
+  static parser::SQLStatement *CreateDatabaseTransform(
+      CreateDatabaseStmt *root);
 
   // transform helper for create schema statements
   static parser::SQLStatement *CreateSchemaTransform(CreateSchemaStmt *root);
@@ -221,10 +222,12 @@ class PostgresParser {
   static parser::SQLStatement *DeleteTransform(DeleteStmt *root);
 
   // transform helper for single node in parse list
-  static parser::SQLStatement *NodeTransform(Node *stmt);
+  static parser::SQLStatement *NodeTransform(
+      Node *stmt, const char *query_string = nullptr);
 
   // transform helper for the whole parse list
-  static parser::SQLStatementList *ListTransform(List *root);
+  static parser::SQLStatementList *ListTransform(
+      List *root, const char *query_string = nullptr);
 
   // transform helper for update statement
   static parser::UpdateStatement *UpdateTransform(UpdateStmt *update_stmt);
@@ -279,13 +282,13 @@ class PostgresParser {
   static parser::CopyStatement *CopyTransform(CopyStmt *root);
 
   // transform helper for analyze statement
-  static parser::AnalyzeStatement *VacuumTransform(VacuumStmt* root);
+  static parser::AnalyzeStatement *VacuumTransform(VacuumStmt *root);
 
-  static parser::VariableSetStatement *VariableSetTransform(VariableSetStmt* root);
+  static parser::VariableSetStatement *VariableSetTransform(
+      VariableSetStmt *root);
 
   // transform helper for subquery expressions
   static expression::AbstractExpression *SubqueryExprTransform(SubLink *node);
-
 };
 
 }  // namespace parser
