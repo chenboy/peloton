@@ -1,12 +1,10 @@
 #include <sstream>
 
+
 #include "udf/plpgsql_parser.h"
 
 #include "common/exception.h"
 #include "expression/expression_util.h"
-#include <jsoncpp/jsoncpp.h>
-#include "parser/pg_query.h"
-#include "parser/postgresparser.h"
 
 namespace peloton {
 

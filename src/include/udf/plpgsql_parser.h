@@ -1,6 +1,8 @@
 #include <memory>
 #include <vector>
 
+#pragma once
+
 #include <jsoncpp/jsoncpp.h>
 #include "udf/ast_nodes.h"
 
