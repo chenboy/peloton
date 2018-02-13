@@ -254,5 +254,32 @@ void FunctionBuilder::ReturnAndFinish(llvm::Value *ret) {
   finished_ = true;
 }
 
+// Finish the function without returning any value
+void FunctionBuilder::Finish() {
+  if (finished_) {
+    return;
+  }
+
+  // Add the overflow error block if it exists
+  if (overflow_bb_ != nullptr) {
+    overflow_bb_->insertInto(func_);
+  }
+
+  // Add the divide-by-zero error block if it exists
+  if (divide_by_zero_bb_ != nullptr) {
+    divide_by_zero_bb_->insertInto(func_);
+  }
+
+  // Restore previous function construction state in the code context
+  if (previous_insert_point_ != nullptr) {
+    PL_ASSERT(previous_function_ != nullptr);
+    code_context_.GetBuilder().SetInsertPoint(previous_insert_point_);
+    code_context_.SetCurrentFunction(previous_function_);
+  }
+
+  // Now we're done
+  finished_ = true;
+}
+
 }  // namespace codegen
 }  // namespace peloton

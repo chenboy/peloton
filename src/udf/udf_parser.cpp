@@ -254,7 +254,7 @@ std::unique_ptr<ExprAST> UDFParser::ParseIfExpr() {
   auto else_stmt = ParseExpression();
   if (!else_stmt) return nullptr;
 
-  return llvm::make_unique<IfExprAST>(std::move(if_cond), std::move(then_stmt),
+  return llvm::make_unique<IfStmtAST>(std::move(if_cond), std::move(then_stmt),
                                       std::move(else_stmt));
 }
 

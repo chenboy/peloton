@@ -101,6 +101,7 @@ class FunctionBuilder {
 
   // Finish the current function
   void ReturnAndFinish(llvm::Value *res = nullptr);
+  void Finish();
 
   // Return the function we created in the code context
   llvm::Function *GetFunction() const { return func_; }
