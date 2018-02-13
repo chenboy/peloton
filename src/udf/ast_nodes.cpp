@@ -165,14 +165,16 @@ peloton::codegen::Value IfStmtAST::Codegen(
   }
   entry_cond.EndIf();
 
-  auto *val1 = if_result.GetValue();
-  auto *val2 = else_result.GetValue();
+  // auto *val1 = if_result.GetValue();
+  // auto *val2 = else_result.GetValue();
 
-  auto *final_result = entry_cond.BuildPHI(val1, val2);
+  // auto *final_result = entry_cond.BuildPHI(val1, val2);
 
-  auto return_val = peloton::codegen::Value(
-      peloton::codegen::type::Type(type::TypeId::DECIMAL, false), final_result);
+  // auto return_val = peloton::codegen::Value(
+      // peloton::codegen::type::Type(type::TypeId::DECIMAL, false), final_result);
 
+  peloton::codegen::Value return_val;
+  
   return return_val;
 }
 
