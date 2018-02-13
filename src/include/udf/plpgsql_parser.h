@@ -18,8 +18,10 @@ class PLpgSQLParser {
   std::unique_ptr<FunctionAST> ParsePLpgSQL(std::string func_body);
 
  private:
-  std::unique_ptr<ExprAST> ParseBlock(const Json::Value block);
-  std::unique_ptr<ExprAST> ParseIf(const Json::Value branch);
+  std::unique_ptr<StmtAST> ParseBlock(const Json::Value block);
+  std::unique_ptr<StmtAST> ParseFunction(const Json::Value block);
+  std::unique_ptr<StmtAST> ParseDecl(const Json::Value decl);
+  std::unique_ptr<StmtAST> ParseIf(const Json::Value branch);
   // Feed the expression (as a sql string) to our parser then transform the
   // peloton expression into ast node
   std::unique_ptr<ExprAST> ParseExprSQL(const std::string expr_sql_str);

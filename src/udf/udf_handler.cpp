@@ -90,6 +90,7 @@ std::shared_ptr<codegen::CodeContext> UDFHandler::Compile(
   PLpgSQLParser parser(func_name, args_type);
   LOG_DEBUG("func_body : %s", func_body.c_str());
   auto func = parser.ParsePLpgSQL(func_body);
+  LOG_INFO("Parsing successful");
   PL_ASSERT(func != nullptr);
   if (auto *func_ptr = func->Codegen(cg, fb)) {
     // Required for referencing from Peloton code

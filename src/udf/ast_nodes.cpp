@@ -7,6 +7,28 @@
 namespace peloton {
 namespace udf {
 
+std::map<std::string, llvm::Value*> variable_alloc;
+
+// Codegen for SeqStmtAST
+peloton::codegen::Value SeqStmtAST::Codegen(
+    peloton::codegen::CodeGen &codegen, peloton::codegen::FunctionBuilder &fb) {
+  peloton::codegen::Value seqstmt_codegen_val;
+  for(uint32_t i = 0; i < stmts.size(); i++) {
+    stmts[i]->Codegen(codegen, fb);
+  }
+  
+  return seqstmt_codegen_val;
+}
+
+// Codegen for DeclStmtAST
+peloton::codegen::Value DeclStmtAST::Codegen(
+    peloton::codegen::CodeGen &codegen,
+    UNUSED_ATTRIBUTE peloton::codegen::FunctionBuilder &fb) {
+  peloton::codegen::Value decl_codegen_val;
+  variable_alloc[name] = codegen.AllocateVariable(codegen.DoubleType(), name);
+  return decl_codegen_val;
+}
+
 // Codegen for NumberExprAST
 peloton::codegen::Value NumberExprAST::Codegen(
     peloton::codegen::CodeGen &codegen,
@@ -26,13 +48,33 @@ peloton::codegen::Value VariableExprAST::Codegen(
   if (val) {
     return peloton::codegen::Value(
         peloton::codegen::type::Type(type::TypeId::DECIMAL, false), val);
+  } else {
+    // Assuming each variable is defined
+    auto *ret_val = codegen->CreateLoad(variable_alloc[name]);
+    return peloton::codegen::Value(
+        peloton::codegen::type::Type(type::TypeId::DECIMAL, false), ret_val);
   }
+
   return LogErrorV("Unknown variable name");
+}
+
+llvm::Value *VariableExprAST::GetAllocVal() {
+  return variable_alloc[name];
 }
 
 // Codegen for BinaryExprAST
 peloton::codegen::Value BinaryExprAST::Codegen(
     peloton::codegen::CodeGen &codegen, peloton::codegen::FunctionBuilder &fb) {
+  if(op == '=') {
+    auto *right_val = (rhs->Codegen(codegen, fb)).GetValue();
+    // VariableExprAST *var_exp = dynamic_cast<VariableExprAST*>(lhs);
+    // auto *left_val = lhs->GetAllocVal();
+    auto *left_val = variable_alloc["x"];
+    auto *ret_val = codegen->CreateStore(right_val, left_val);
+    return peloton::codegen::Value(
+        peloton::codegen::type::Type(type::TypeId::DECIMAL, false), ret_val);
+  }
+
   peloton::codegen::Value left = lhs->Codegen(codegen, fb);
   peloton::codegen::Value right = rhs->Codegen(codegen, fb);
   if (left.GetValue() == 0 || right.GetValue() == 0) {
@@ -99,7 +141,7 @@ peloton::codegen::Value CallExprAST::Codegen(
   return call_val;
 }
 
-peloton::codegen::Value IfExprAST::Codegen(
+peloton::codegen::Value IfStmtAST::Codegen(
     peloton::codegen::CodeGen &codegen, peloton::codegen::FunctionBuilder &fb) {
   auto compare_value = peloton::codegen::Value(
       peloton::codegen::type::Type(type::TypeId::DECIMAL, false),
@@ -134,13 +176,28 @@ peloton::codegen::Value IfExprAST::Codegen(
   return return_val;
 }
 
+// Codegen for RetStmtAST
+peloton::codegen::Value RetStmtAST::Codegen(
+    peloton::codegen::CodeGen &codegen,
+    UNUSED_ATTRIBUTE peloton::codegen::FunctionBuilder &fb) {
+  peloton::codegen::Value decl_codegen_val;
+  // TODO[Siva]: Will need to add more checks to ensure that this is done
+  // Handle when supporting types
+  if(expr == nullptr) {
+    codegen->CreateRetVoid();
+  } else {
+    auto expr_ret_val = expr->Codegen(codegen, fb);
+    codegen->CreateRet(expr_ret_val.GetValue());
+  }
+  return decl_codegen_val;
+}
+
 // Codegen for FunctionAST
 llvm::Function *FunctionAST::Codegen(peloton::codegen::CodeGen &codegen,
                                      peloton::codegen::FunctionBuilder &fb) {
-  peloton::codegen::Value ret = body->Codegen(codegen, fb);
-
-  fb.ReturnAndFinish(ret.GetValue());
-
+  variable_alloc.clear();
+  body->Codegen(codegen, fb);
+  fb.Finish();
   return fb.GetFunction();
 }
 

@@ -18,14 +18,61 @@ namespace udf {
 // TODO(boweic): naming convention
 using arg_type = type::TypeId;
 
+// AbstractAST - Base class for all AST nodes.
+class AbstractAST {
+ public:
+  virtual ~AbstractAST() = default;
+
+  virtual peloton::codegen::Value Codegen(
+      peloton::codegen::CodeGen &codegen,
+      peloton::codegen::FunctionBuilder &fb) = 0;
+};
+
+// StmtAST - Base class for all statement nodes.
+class StmtAST : public AbstractAST {
+ public:
+  virtual ~StmtAST() = default;
+
+  virtual peloton::codegen::Value Codegen(
+      peloton::codegen::CodeGen &codegen,
+      peloton::codegen::FunctionBuilder &fb) = 0;
+};
+
 // ExprAST - Base class for all expression nodes.
-class ExprAST {
+class ExprAST : public StmtAST {
  public:
   virtual ~ExprAST() = default;
 
   virtual peloton::codegen::Value Codegen(
       peloton::codegen::CodeGen &codegen,
       peloton::codegen::FunctionBuilder &fb) = 0;
+};
+
+// SeqStmtAST - Statement class for sequence of statements
+class SeqStmtAST : public StmtAST {
+  std::vector<std::unique_ptr<StmtAST>> stmts;
+
+ public:
+  SeqStmtAST(std::vector<std::unique_ptr<StmtAST>> stmts)
+      : stmts(std::move(stmts)) {}
+
+  peloton::codegen::Value Codegen(
+      peloton::codegen::CodeGen &codegen,
+      peloton::codegen::FunctionBuilder &fb) override;
+};
+
+// DeclStmtAST - Statement class for sequence of statements
+class DeclStmtAST : public StmtAST {
+  std::string name;
+  std::string type;
+
+ public:
+  DeclStmtAST(std::string name, std::string type)
+      : name(std::move(name)), type(std::move(type)) {}
+
+  peloton::codegen::Value Codegen(
+      peloton::codegen::CodeGen &codegen,
+      peloton::codegen::FunctionBuilder &fb) override;
 };
 
 // NumberExprAST - Expression class for numeric literals like "1.0".
@@ -50,6 +97,8 @@ class VariableExprAST : public ExprAST {
   peloton::codegen::Value Codegen(
       peloton::codegen::CodeGen &codegen,
       peloton::codegen::FunctionBuilder &fb) override;
+
+  llvm::Value *GetAllocVal();
 };
 
 // BinaryExprAST - Expression class for a binary operator.
@@ -88,14 +137,15 @@ class CallExprAST : public ExprAST {
       peloton::codegen::FunctionBuilder &fb) override;
 };
 
-/// IfExprAST - Expression class for if/then/else.
-class IfExprAST : public ExprAST {
-  std::unique_ptr<ExprAST> cond_expr, then_stmt, else_stmt;
+// IfStmtAST - Statement class for if/then/else.
+class IfStmtAST : public ExprAST {
+  std::unique_ptr<ExprAST> cond_expr;
+  std::unique_ptr<StmtAST> then_stmt, else_stmt;
 
  public:
-  IfExprAST(std::unique_ptr<ExprAST> cond_expr,
-            std::unique_ptr<ExprAST> then_stmt,
-            std::unique_ptr<ExprAST> else_stmt)
+  IfStmtAST(std::unique_ptr<ExprAST> cond_expr,
+            std::unique_ptr<StmtAST> then_stmt,
+            std::unique_ptr<StmtAST> else_stmt)
       : cond_expr(std::move(cond_expr)),
         then_stmt(std::move(then_stmt)),
         else_stmt(std::move(else_stmt)) {}
@@ -105,12 +155,25 @@ class IfExprAST : public ExprAST {
       peloton::codegen::FunctionBuilder &fb) override;
 };
 
-// FunctionAST - This class represents a function definition itself.
-class FunctionAST {
-  std::unique_ptr<ExprAST> body;
+// RetStmtAST - Statement class for sequence of statements
+class RetStmtAST : public StmtAST {
+  std::unique_ptr<ExprAST> expr;
 
  public:
-  FunctionAST(std::unique_ptr<ExprAST> body) : body(std::move(body)) {}
+  RetStmtAST(std::unique_ptr<ExprAST> expr) : expr(std::move(expr)) {}
+
+  peloton::codegen::Value Codegen(
+      peloton::codegen::CodeGen &codegen,
+      peloton::codegen::FunctionBuilder &fb) override;
+};
+
+
+// FunctionAST - This class represents a function definition itself.
+class FunctionAST {
+  std::unique_ptr<StmtAST> body;
+
+ public:
+  FunctionAST(std::unique_ptr<StmtAST> body) : body(std::move(body)) {}
 
   llvm::Function *Codegen(peloton::codegen::CodeGen &codegen,
                           peloton::codegen::FunctionBuilder &fb);
