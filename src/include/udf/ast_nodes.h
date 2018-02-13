@@ -23,9 +23,8 @@ class AbstractAST {
  public:
   virtual ~AbstractAST() = default;
 
-  virtual peloton::codegen::Value Codegen(
-      peloton::codegen::CodeGen &codegen,
-      peloton::codegen::FunctionBuilder &fb) = 0;
+  virtual void Codegen(codegen::CodeGen &codegen, codegen::FunctionBuilder &fb,
+                       codegen::Value *dst) = 0;
 };
 
 // StmtAST - Base class for all statement nodes.
@@ -33,9 +32,9 @@ class StmtAST : public AbstractAST {
  public:
   virtual ~StmtAST() = default;
 
-  virtual peloton::codegen::Value Codegen(
+  virtual void Codegen(
       peloton::codegen::CodeGen &codegen,
-      peloton::codegen::FunctionBuilder &fb) = 0;
+      peloton::codegen::FunctionBuilder &fb, codegen::Value *dst) = 0;
 };
 
 // ExprAST - Base class for all expression nodes.
@@ -43,36 +42,9 @@ class ExprAST : public StmtAST {
  public:
   virtual ~ExprAST() = default;
 
-  virtual peloton::codegen::Value Codegen(
+  virtual void Codegen(
       peloton::codegen::CodeGen &codegen,
-      peloton::codegen::FunctionBuilder &fb) = 0;
-};
-
-// SeqStmtAST - Statement class for sequence of statements
-class SeqStmtAST : public StmtAST {
-  std::vector<std::unique_ptr<StmtAST>> stmts;
-
- public:
-  SeqStmtAST(std::vector<std::unique_ptr<StmtAST>> stmts)
-      : stmts(std::move(stmts)) {}
-
-  peloton::codegen::Value Codegen(
-      peloton::codegen::CodeGen &codegen,
-      peloton::codegen::FunctionBuilder &fb) override;
-};
-
-// DeclStmtAST - Statement class for sequence of statements
-class DeclStmtAST : public StmtAST {
-  std::string name;
-  std::string type;
-
- public:
-  DeclStmtAST(std::string name, std::string type)
-      : name(std::move(name)), type(std::move(type)) {}
-
-  peloton::codegen::Value Codegen(
-      peloton::codegen::CodeGen &codegen,
-      peloton::codegen::FunctionBuilder &fb) override;
+      peloton::codegen::FunctionBuilder &fb, codegen::Value *dst) = 0;
 };
 
 // NumberExprAST - Expression class for numeric literals like "1.0".
@@ -82,9 +54,9 @@ class NumberExprAST : public ExprAST {
  public:
   NumberExprAST(int val) : val(val) {}
 
-  peloton::codegen::Value Codegen(
+  void Codegen(
       peloton::codegen::CodeGen &codegen,
-      peloton::codegen::FunctionBuilder &fb) override;
+      peloton::codegen::FunctionBuilder &fb, codegen::Value *dst) override;
 };
 
 // VariableExprAST - Expression class for referencing a variable, like "a".
@@ -94,9 +66,9 @@ class VariableExprAST : public ExprAST {
  public:
   VariableExprAST(const std::string &name) : name(name) {}
 
-  peloton::codegen::Value Codegen(
+  void Codegen(
       peloton::codegen::CodeGen &codegen,
-      peloton::codegen::FunctionBuilder &fb) override;
+      peloton::codegen::FunctionBuilder &fb, codegen::Value *dst) override;
 
   llvm::Value *GetAllocVal();
 };
@@ -111,9 +83,9 @@ class BinaryExprAST : public ExprAST {
                 std::unique_ptr<ExprAST> rhs)
       : op(op), lhs(std::move(lhs)), rhs(std::move(rhs)) {}
 
-  peloton::codegen::Value Codegen(
+  void Codegen(
       peloton::codegen::CodeGen &codegen,
-      peloton::codegen::FunctionBuilder &fb) override;
+      peloton::codegen::FunctionBuilder &fb, codegen::Value *dst) override;
 };
 
 // CallExprAST - Expression class for function calls.
@@ -132,9 +104,36 @@ class CallExprAST : public ExprAST {
     args_type = args_type;
   }
 
-  peloton::codegen::Value Codegen(
+  void Codegen(
       peloton::codegen::CodeGen &codegen,
-      peloton::codegen::FunctionBuilder &fb) override;
+      peloton::codegen::FunctionBuilder &fb, codegen::Value *dst) override;
+};
+
+// SeqStmtAST - Statement class for sequence of statements
+class SeqStmtAST : public StmtAST {
+  std::vector<std::unique_ptr<StmtAST>> stmts;
+
+ public:
+  SeqStmtAST(std::vector<std::unique_ptr<StmtAST>> stmts)
+      : stmts(std::move(stmts)) {}
+
+  void Codegen(
+      peloton::codegen::CodeGen &codegen,
+      peloton::codegen::FunctionBuilder &fb, codegen::Value *dst) override;
+};
+
+// DeclStmtAST - Statement class for sequence of statements
+class DeclStmtAST : public StmtAST {
+  std::string name;
+  std::string type;
+
+ public:
+  DeclStmtAST(std::string name, std::string type)
+      : name(std::move(name)), type(std::move(type)) {}
+
+  void Codegen(
+      peloton::codegen::CodeGen &codegen,
+      peloton::codegen::FunctionBuilder &fb, codegen::Value *dst) override;
 };
 
 // IfStmtAST - Statement class for if/then/else.
@@ -150,9 +149,9 @@ class IfStmtAST : public ExprAST {
         then_stmt(std::move(then_stmt)),
         else_stmt(std::move(else_stmt)) {}
 
-  peloton::codegen::Value Codegen(
+  void Codegen(
       peloton::codegen::CodeGen &codegen,
-      peloton::codegen::FunctionBuilder &fb) override;
+      peloton::codegen::FunctionBuilder &fb, codegen::Value *dst) override;
 };
 
 // RetStmtAST - Statement class for sequence of statements
@@ -162,11 +161,10 @@ class RetStmtAST : public StmtAST {
  public:
   RetStmtAST(std::unique_ptr<ExprAST> expr) : expr(std::move(expr)) {}
 
-  peloton::codegen::Value Codegen(
+  void Codegen(
       peloton::codegen::CodeGen &codegen,
-      peloton::codegen::FunctionBuilder &fb) override;
+      peloton::codegen::FunctionBuilder &fb, codegen::Value *dst) override;
 };
-
 
 // FunctionAST - This class represents a function definition itself.
 class FunctionAST {

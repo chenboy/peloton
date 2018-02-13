@@ -60,8 +60,7 @@ std::unique_ptr<FunctionAST> PLpgSQLParser::ParsePLpgSQL(
 
   variable.clear();
 
-  const auto function =
-      function_list[0][kPLpgSQL_function];
+  const auto function = function_list[0][kPLpgSQL_function];
   std::unique_ptr<FunctionAST> function_ast(
       new FunctionAST(ParseFunction(function)));
   return function_ast;
@@ -69,8 +68,7 @@ std::unique_ptr<FunctionAST> PLpgSQLParser::ParsePLpgSQL(
 
 std::unique_ptr<StmtAST> PLpgSQLParser::ParseFunction(const Json::Value block) {
   const auto decl_list = block[kDatums];
-  const auto function_body = 
-              block[kAction][kPLpgSQL_stmt_block][kBody];
+  const auto function_body = block[kAction][kPLpgSQL_stmt_block][kBody];
 
   std::vector<std::unique_ptr<StmtAST>> stmts;
 
@@ -83,7 +81,7 @@ std::unique_ptr<StmtAST> PLpgSQLParser::ParseFunction(const Json::Value block) {
   stmts.push_back(ParseBlock(function_body));
 
   std::unique_ptr<SeqStmtAST> seq_stmt_ast(new SeqStmtAST(std::move(stmts)));
-  return seq_stmt_ast;
+  return std::move(seq_stmt_ast);
 }
 
 std::unique_ptr<StmtAST> PLpgSQLParser::ParseBlock(const Json::Value block) {
@@ -91,8 +89,7 @@ std::unique_ptr<StmtAST> PLpgSQLParser::ParseBlock(const Json::Value block) {
   LOG_DEBUG("Parsing Function Block");
   PL_ASSERT(block.isArray());
   if (block.size() == 0) {
-    throw Exception(
-        "PL/pgSQL parser : Empty block is not supported");
+    throw Exception("PL/pgSQL parser : Empty block is not supported");
   }
 
   std::vector<std::unique_ptr<StmtAST>> stmts;
@@ -104,22 +101,21 @@ std::unique_ptr<StmtAST> PLpgSQLParser::ParseBlock(const Json::Value block) {
     LOG_DEBUG("Statemnt : %s", stmt_names[0].c_str());
 
     if (stmt_names[0] == kPLpgSQL_stmt_return) {
-      // TODO(boweic): Build an ast for return node
       auto expr = ParseExprSQL(
-        stmt[kPLpgSQL_stmt_return][kExpr][kPLpgSQL_expr][kQuery].asString());
+          stmt[kPLpgSQL_stmt_return][kExpr][kPLpgSQL_expr][kQuery].asString());
+      // TODO(boweic): Handle return stmt w/o expression
       std::unique_ptr<RetStmtAST> ret_stmt_ast(new RetStmtAST(std::move(expr)));
       stmts.push_back(std::move(ret_stmt_ast));
     } else if (stmt_names[0] == kPLpgSQL_stmt_if) {
       stmts.push_back(ParseIf(stmt[kPLpgSQL_stmt_if]));
     } else if (stmt_names[0] == kPLpgSQL_stmt_assign) {
       // TODO[Siva]: Need to fix Assignment expression / statement
-      std::unique_ptr<ExprAST> lhs(
-          new VariableExprAST(
-              variable[stmt[kPLpgSQL_stmt_assign][kVarno].asInt()]));
+      std::unique_ptr<ExprAST> lhs(new VariableExprAST(
+          variable[stmt[kPLpgSQL_stmt_assign][kVarno].asInt()]));
       auto rhs = ParseExprSQL(
           stmt[kPLpgSQL_stmt_assign][kExpr][kPLpgSQL_expr][kQuery].asString());
-      std::unique_ptr<BinaryExprAST> ass_expr_ast(new BinaryExprAST(
-          '=', std::move(lhs), std::move(rhs)));
+      std::unique_ptr<BinaryExprAST> ass_expr_ast(
+          new BinaryExprAST('=', std::move(lhs), std::move(rhs)));
       stmts.push_back(std::move(ass_expr_ast));
     } else {
       throw Exception("Statement type not supported : " + stmt_names[0]);
@@ -127,7 +123,7 @@ std::unique_ptr<StmtAST> PLpgSQLParser::ParseBlock(const Json::Value block) {
   }
 
   std::unique_ptr<SeqStmtAST> seq_stmt_ast(new SeqStmtAST(std::move(stmts)));
-  return seq_stmt_ast;
+  return std::move(seq_stmt_ast);
 }
 
 std::unique_ptr<StmtAST> PLpgSQLParser::ParseDecl(const Json::Value decl) {
@@ -138,8 +134,8 @@ std::unique_ptr<StmtAST> PLpgSQLParser::ParseDecl(const Json::Value decl) {
   if (decl_names[0] == kPLpgSQL_var) {
     variable.push_back(decl[kPLpgSQL_var][kRefname].asString());
     return std::unique_ptr<DeclStmtAST>(new DeclStmtAST(
-      decl[kPLpgSQL_var][kRefname].asString(),
-      decl[kPLpgSQL_var][kDatatype][kPLpgSQL_type][kTypname].asString()));
+        decl[kPLpgSQL_var][kRefname].asString(),
+        decl[kPLpgSQL_var][kDatatype][kPLpgSQL_type][kTypname].asString()));
   } else {
     // TODO[Siva]: need to handle other types like row, table etc;
     throw Exception("Declaration type not supported : " + decl_names[0]);
@@ -161,6 +157,9 @@ std::unique_ptr<ExprAST> PLpgSQLParser::ParseExprSQL(
   LOG_DEBUG("Parsing Expr SQL : %s", expr_sql_str.c_str());
   auto &parser = parser::PostgresParser::GetInstance();
   auto stmt_list = parser.BuildParseTree(expr_sql_str.c_str());
+  if (stmt_list == nullptr) {
+    return nullptr;
+  }
   PL_ASSERT(stmt_list->GetNumStatements() == 1);
   auto stmt = stmt_list->GetStatement(0);
   PL_ASSERT(stmt->GetType() == StatementType::SELECT);
