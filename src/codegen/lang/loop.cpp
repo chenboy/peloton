@@ -65,7 +65,9 @@ void Loop::LoopEnd(llvm::Value *end_condition,
   // variable
   auto *loop_end_bb = cg_->GetInsertBlock();
   last_loop_bb_ = loop_end_bb;
-  cg_->CreateCondBr(end_condition, loop_bb_, end_bb_);
+  if (!cg_.IsTerminated()) {
+    cg_->CreateCondBr(end_condition, loop_bb_, end_bb_);
+  }
 
   for (uint32_t i = 0; i < phi_nodes_.size(); i++) {
     phi_nodes_[i]->addIncoming(next[i], loop_end_bb);
