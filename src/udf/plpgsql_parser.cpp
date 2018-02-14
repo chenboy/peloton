@@ -110,12 +110,12 @@ std::unique_ptr<StmtAST> PLpgSQLParser::ParseBlock(const Json::Value block) {
       stmts.push_back(ParseIf(stmt[kPLpgSQL_stmt_if]));
     } else if (stmt_names[0] == kPLpgSQL_stmt_assign) {
       // TODO[Siva]: Need to fix Assignment expression / statement
-      std::unique_ptr<ExprAST> lhs(new VariableExprAST(
+      std::unique_ptr<VariableExprAST> lhs(new VariableExprAST(
           variable[stmt[kPLpgSQL_stmt_assign][kVarno].asInt()]));
       auto rhs = ParseExprSQL(
           stmt[kPLpgSQL_stmt_assign][kExpr][kPLpgSQL_expr][kQuery].asString());
-      std::unique_ptr<BinaryExprAST> ass_expr_ast(
-          new BinaryExprAST('=', std::move(lhs), std::move(rhs)));
+      std::unique_ptr<AssignStmtAST> ass_expr_ast(
+          new AssignStmtAST(std::move(lhs), std::move(rhs)));
       stmts.push_back(std::move(ass_expr_ast));
     } else {
       throw Exception("Statement type not supported : " + stmt_names[0]);

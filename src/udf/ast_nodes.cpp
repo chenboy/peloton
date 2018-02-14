@@ -164,7 +164,7 @@ void CallExprAST::Codegen(codegen::CodeGen &codegen,
 }
 
 void IfStmtAST::Codegen(codegen::CodeGen &codegen, codegen::FunctionBuilder &fb,
-                        codegen::Value *dst) {
+                        UNUSED_ATTRIBUTE codegen::Value *dst) {
   PL_ASSERT(dst == nullptr);
   auto compare_value = peloton::codegen::Value(
       peloton::codegen::type::Type(type::TypeId::DECIMAL, false),
@@ -212,6 +212,16 @@ void RetStmtAST::Codegen(codegen::CodeGen &codegen,
     codegen->CreateRet(expr_ret_val.GetValue());
   }
   return;
+}
+
+// Codegen for AssignStmtAST
+void AssignStmtAST::Codegen(codegen::CodeGen &codegen,
+                            UNUSED_ATTRIBUTE codegen::FunctionBuilder &fb,
+                            UNUSED_ATTRIBUTE codegen::Value *dst) {
+  codegen::Value right_val;
+  rhs->Codegen(codegen, fb, &right_val);
+  auto *left_val = lhs->GetAllocVal();
+  codegen->CreateStore(right_val.GetValue(), left_val);
 }
 
 // Codegen for FunctionAST

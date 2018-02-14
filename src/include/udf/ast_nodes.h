@@ -166,6 +166,22 @@ class RetStmtAST : public StmtAST {
       peloton::codegen::FunctionBuilder &fb, codegen::Value *dst) override;
 };
 
+// AssignStmtAST - Expression class for a binary operator.
+class AssignStmtAST : public ExprAST {
+  std::unique_ptr<VariableExprAST> lhs;
+  std::unique_ptr<ExprAST> rhs;
+
+ public:
+  AssignStmtAST(std::unique_ptr<VariableExprAST> lhs,
+                std::unique_ptr<ExprAST> rhs)
+      : lhs(std::move(lhs)), rhs(std::move(rhs)) {}
+
+  void Codegen(
+      peloton::codegen::CodeGen &codegen,
+      peloton::codegen::FunctionBuilder &fb, codegen::Value *dst) override;
+};
+
+
 // FunctionAST - This class represents a function definition itself.
 class FunctionAST {
   std::unique_ptr<StmtAST> body;
