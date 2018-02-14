@@ -146,6 +146,13 @@ class CodeGen {
     return code_context_.GetCurrentFunction();
   }
 
+  //===--------------------------------------------------------------------===//
+  // Helper
+  //===--------------------------------------------------------------------===//
+  bool IsTerminated() {
+    return GetBuilder().GetInsertBlock()->getTerminator() != nullptr;
+  }
+
  private:
   friend class Hash;
   friend class Value;

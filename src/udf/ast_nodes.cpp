@@ -198,7 +198,14 @@ void RetStmtAST::Codegen(codegen::CodeGen &codegen,
   // TODO[Siva]: Will need to add more checks to ensure that this is done
   // Handle when supporting types
   if (expr == nullptr) {
-    codegen->CreateRetVoid();
+    // codegen->CreateRetVoid();
+    // TODO(boweic): We should deduce type in typechecking phase and create a
+    // default value for that type, or find a way to get around llvm basic block
+    // without return
+    codegen::Value value = peloton::codegen::Value(
+        peloton::codegen::type::Type(type::TypeId::DECIMAL, false),
+        codegen.ConstDouble(0));
+    codegen->CreateRet(value.GetValue());
   } else {
     codegen::Value expr_ret_val;
     expr->Codegen(codegen, fb, &expr_ret_val);

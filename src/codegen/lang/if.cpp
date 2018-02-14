@@ -43,12 +43,14 @@ If::If(CodeGen &cg, const codegen::Value &if_condition, const std::string &name)
     : If(cg, type::Boolean::Instance().Reify(cg, if_condition), name) {}
 
 void If::EndIf(llvm::BasicBlock *end_bb) {
-  if (end_bb != nullptr) {
-    // Create an unconditional branch to the provided basic block
-    cg_->CreateBr(end_bb);
-  } else {
-    // Create an unconditional branch to the merging block
-    cg_->CreateBr(merge_bb_);
+  if (!cg_.IsTerminated()) {
+    if (end_bb != nullptr) {
+      // Create an unconditional branch to the provided basic block
+      cg_->CreateBr(end_bb);
+    } else {
+      // Create an unconditional branch to the merging block
+      cg_->CreateBr(merge_bb_);
+    }
   }
 
   auto *curr_bb = cg_->GetInsertBlock();
@@ -68,7 +70,9 @@ void If::EndIf(llvm::BasicBlock *end_bb) {
 void If::ElseBlock(const std::string &name) {
   // Create an unconditional branch from where we are (from the 'then' branch)
   // to the merging block
-  cg_->CreateBr(merge_bb_);
+  if (!cg_.IsTerminated()) {
+    cg_->CreateBr(merge_bb_);
+  }
 
   // Create a new else block
   else_bb_ = llvm::BasicBlock::Create(cg_.GetContext(), name, fn_);
