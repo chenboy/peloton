@@ -2,6 +2,7 @@
 #include <iostream>  ////TODO(PP) Remove
 #include "catalog/catalog.h"
 #include "codegen/lang/if.h"
+#include "codegen/lang/loop.h"
 #include "codegen/type/type.h"
 
 namespace peloton {
@@ -190,6 +191,37 @@ void IfStmtAST::Codegen(codegen::CodeGen &codegen, codegen::FunctionBuilder &fb,
   return;
 }
 
+void WhileStmtAST::Codegen(codegen::CodeGen &codegen,
+                           codegen::FunctionBuilder &fb, codegen::Value *dst) {
+  PL_ASSERT(dst == nullptr);
+  // TODO(boweic): Use boolean when supported
+  auto compare_value =
+      peloton::codegen::Value(codegen::type::Type(type::TypeId::DECIMAL, false),
+                              codegen.ConstDouble(1.0));
+
+  peloton::codegen::Value cond_expr_value;
+  cond_expr->Codegen(codegen, fb, &cond_expr_value);
+
+  // Codegen If condition expression
+  codegen::lang::Loop loop{
+      codegen,
+      cond_expr_value.CompareEq(codegen, compare_value).GetValue(),
+      {}};
+  {
+    body_stmt->Codegen(codegen, fb, nullptr);
+    // TODO(boweic): Use boolean when supported
+    auto compare_value = peloton::codegen::Value(
+        codegen::type::Type(type::TypeId::DECIMAL, false),
+        codegen.ConstDouble(1.0));
+
+    peloton::codegen::Value cond_expr_value;
+    cond_expr->Codegen(codegen, fb, &cond_expr_value);
+    loop.LoopEnd(cond_expr_value.CompareEq(codegen, compare_value).GetValue(),
+                 {});
+  }
+
+  return;
+}
 // Codegen for RetStmtAST
 void RetStmtAST::Codegen(codegen::CodeGen &codegen,
                          UNUSED_ATTRIBUTE codegen::FunctionBuilder &fb,
@@ -198,7 +230,6 @@ void RetStmtAST::Codegen(codegen::CodeGen &codegen,
   // TODO[Siva]: Will need to add more checks to ensure that this is done
   // Handle when supporting types
   if (expr == nullptr) {
-    // codegen->CreateRetVoid();
     // TODO(boweic): We should deduce type in typechecking phase and create a
     // default value for that type, or find a way to get around llvm basic block
     // without return
