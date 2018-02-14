@@ -22,6 +22,7 @@ const std::string kBody = "body";
 const std::string kPLpgSQL_stmt_block = "PLpgSQL_stmt_block";
 const std::string kPLpgSQL_stmt_return = "PLpgSQL_stmt_return";
 const std::string kPLpgSQL_stmt_if = "PLpgSQL_stmt_if";
+const std::string kPLpgSQL_stmt_while = "PLpgSQL_stmt_while";
 const std::string kCond = "cond";
 const std::string kThenBody = "then_body";
 const std::string kElseBody = "else_body";
@@ -117,6 +118,8 @@ std::unique_ptr<StmtAST> PLpgSQLParser::ParseBlock(const Json::Value block) {
       std::unique_ptr<AssignStmtAST> ass_expr_ast(
           new AssignStmtAST(std::move(lhs), std::move(rhs)));
       stmts.push_back(std::move(ass_expr_ast));
+    } else if (stmt_names[0] == kPLpgSQL_stmt_while) {
+      stmts.push_back(ParseWhile(stmt[kPLpgSQL_stmt_while]));
     } else {
       throw Exception("Statement type not supported : " + stmt_names[0]);
     }
@@ -150,6 +153,14 @@ std::unique_ptr<StmtAST> PLpgSQLParser::ParseIf(const Json::Value branch) {
   auto else_stmt = ParseBlock(branch[kElseBody]);
   return std::unique_ptr<IfStmtAST>(new IfStmtAST(
       std::move(cond_expr), std::move(then_stmt), std::move(else_stmt)));
+}
+
+std::unique_ptr<StmtAST> PLpgSQLParser::ParseWhile(const Json::Value loop) {
+  LOG_DEBUG("ParseWhile");
+  auto cond_expr = ParseExprSQL(loop[kCond][kPLpgSQL_expr][kQuery].asString());
+  auto body_stmt = ParseBlock(loop[kBody]);
+  return std::unique_ptr<WhileStmtAST>(
+      new WhileStmtAST(std::move(cond_expr), std::move(body_stmt)));
 }
 
 std::unique_ptr<ExprAST> PLpgSQLParser::ParseExprSQL(
