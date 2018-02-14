@@ -15,6 +15,10 @@ void SeqStmtAST::Codegen(codegen::CodeGen &codegen,
                          codegen::FunctionBuilder &fb,
                          UNUSED_ATTRIBUTE codegen::Value *dst) {
   for (uint32_t i = 0; i < stmts.size(); i++) {
+    // If already return in the current block, don't continue to generate
+    if (codegen.IsTerminated()) {
+      break;
+    }
     stmts[i]->Codegen(codegen, fb, nullptr);
   }
 
@@ -213,11 +217,13 @@ void WhileStmtAST::Codegen(codegen::CodeGen &codegen,
     auto compare_value = peloton::codegen::Value(
         codegen::type::Type(type::TypeId::DECIMAL, false),
         codegen.ConstDouble(1.0));
-
-    peloton::codegen::Value cond_expr_value;
-    cond_expr->Codegen(codegen, fb, &cond_expr_value);
-    loop.LoopEnd(cond_expr_value.CompareEq(codegen, compare_value).GetValue(),
-                 {});
+    codegen::Value cond_expr_value;
+    codegen::Value cond_var;
+    if (!codegen.IsTerminated()) {
+      cond_expr->Codegen(codegen, fb, &cond_expr_value);
+      cond_var = cond_expr_value.CompareEq(codegen, compare_value);
+    }
+    loop.LoopEnd(cond_var.GetValue(), {});
   }
 
   return;
