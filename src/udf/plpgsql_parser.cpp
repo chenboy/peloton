@@ -32,8 +32,6 @@ const std::string kPLpgSQL_expr = "PLpgSQL_expr";
 const std::string kPLpgSQL_stmt_assign = "PLpgSQL_stmt_assign";
 const std::string kVarno = "varno";
 
-std::vector<std::string> variable;
-
 std::unique_ptr<FunctionAST> PLpgSQLParser::ParsePLpgSQL(
     std::string func_body) {
   auto result = pg_query_parse_plpgsql(func_body.c_str());
@@ -58,8 +56,6 @@ std::unique_ptr<FunctionAST> PLpgSQLParser::ParsePLpgSQL(
     LOG_DEBUG("PL/pgSQL error : Function list size %u", function_list.size());
     throw Exception("Function list has size other than 1");
   }
-
-  variable.clear();
 
   const auto function = function_list[0][kPLpgSQL_function];
   std::unique_ptr<FunctionAST> function_ast(
@@ -112,7 +108,8 @@ std::unique_ptr<StmtAST> PLpgSQLParser::ParseBlock(const Json::Value block) {
     } else if (stmt_names[0] == kPLpgSQL_stmt_assign) {
       // TODO[Siva]: Need to fix Assignment expression / statement
       std::unique_ptr<VariableExprAST> lhs(new VariableExprAST(
-          variable[stmt[kPLpgSQL_stmt_assign][kVarno].asInt()]));
+          udf_context_->GetVariableAtIndex(
+              stmt[kPLpgSQL_stmt_assign][kVarno].asInt())));
       auto rhs = ParseExprSQL(
           stmt[kPLpgSQL_stmt_assign][kExpr][kPLpgSQL_expr][kQuery].asString());
       std::unique_ptr<AssignStmtAST> ass_expr_ast(
@@ -135,17 +132,22 @@ std::unique_ptr<StmtAST> PLpgSQLParser::ParseDecl(const Json::Value decl) {
   LOG_DEBUG("Declaration : %s", decl_names[0].c_str());
 
   if (decl_names[0] == kPLpgSQL_var) {
-    variable.push_back(decl[kPLpgSQL_var][kRefname].asString());
+    auto var_name = decl[kPLpgSQL_var][kRefname].asString();
+    udf_context_->AddVariable(var_name);
+
     auto name = decl[kPLpgSQL_var][kRefname].asString();
     auto type =
         decl[kPLpgSQL_var][kDatatype][kPLpgSQL_type][kTypname].asString();
     if (type == "integer") {
+      udf_context_->SetVariableType(var_name, type::TypeId::INTEGER);
       return std::unique_ptr<DeclStmtAST>(
           new DeclStmtAST(name, type::TypeId::INTEGER));
     } else if (type == "double") {
+      udf_context_->SetVariableType(var_name, type::TypeId::DECIMAL);
       return std::unique_ptr<DeclStmtAST>(
           new DeclStmtAST(name, type::TypeId::DECIMAL));
     } else {
+      udf_context_->SetVariableType(var_name, type::TypeId::INVALID);
       return std::unique_ptr<DeclStmtAST>(
           new DeclStmtAST(name, type::TypeId::INVALID));
     }
@@ -232,9 +234,11 @@ std::unique_ptr<ExprAST> PLpgSQLParser::ParseExpr(
     for (size_t idx = 0; idx < num_args; ++idx) {
       args.push_back(ParseExpr(func_expr->GetChild(idx)));
     }
+    auto func_name = udf_context_->GetFunctionName();
+    auto func_args = udf_context_->GetFunctionArgs();
     return std::unique_ptr<CallExprAST>(
         new CallExprAST(func_expr->GetFuncName(), std::move(args),
-                        curr_func_name_, curr_args_type_));
+                        func_name, func_args));
   } else if (expr->GetExpressionType() == ExpressionType::VALUE_CONSTANT) {
     auto value =
         reinterpret_cast<const expression::ConstantValueExpression *>(expr)

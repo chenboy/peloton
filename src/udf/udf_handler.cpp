@@ -1,5 +1,6 @@
 #include "udf/plpgsql_parser.h"
 #include "udf/udf_handler.h"
+#include "udf/udf_context.h"
 
 namespace peloton {
 namespace udf {
@@ -82,17 +83,19 @@ std::shared_ptr<codegen::CodeContext> UDFHandler::Compile(
   codegen::FunctionBuilder fb{*code_context, func_name, llvm_ret_type,
                               llvm_args};
 
+  UDFContext udf_context(func_name, ret_type, args_type);
+
   // Construct UDF Parser Object
   // std::unique_ptr<UDFParser> parser(new UDFParser(txn));
 
   // Parse UDF and generate the AST
   // parser->ParseUDF(cg, fb, func_body, func_name, args_type);
-  PLpgSQLParser parser(func_name, args_type);
+  PLpgSQLParser parser(&udf_context);
   LOG_DEBUG("func_body : %s", func_body.c_str());
   auto func = parser.ParsePLpgSQL(func_body);
   LOG_INFO("Parsing successful");
   PL_ASSERT(func != nullptr);
-  if (auto *func_ptr = func->Codegen(cg, fb)) {
+  if (auto *func_ptr = func->Codegen(cg, fb, &udf_context)) {
     // Required for referencing from Peloton code
     code_context->SetUDF(func_ptr);
 
@@ -115,7 +118,7 @@ llvm::Type *UDFHandler::GetCodegenParamType(arg_type type_val,
     return cg.DoubleType();
   } else {
     // For now assume it to be a bool to keep compiler happy
-    return cg.BoolType();
+    throw Exception("UDFHandler : Expression type not supported");
   }
 }
 

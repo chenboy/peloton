@@ -12,11 +12,10 @@
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/raw_ostream.h"  // For errs()
 #include "type/type.h"
+#include "udf/udf_context.h"
 
 namespace peloton {
 namespace udf {
-// TODO(boweic): naming convention
-using arg_type = type::TypeId;
 
 // AbstractAST - Base class for all AST nodes.
 class AbstractAST {
@@ -24,7 +23,7 @@ class AbstractAST {
   virtual ~AbstractAST() = default;
 
   virtual void Codegen(codegen::CodeGen &codegen, codegen::FunctionBuilder &fb,
-                       codegen::Value *dst) = 0;
+                       codegen::Value *dst, UDFContext *udf_context) = 0;
 };
 
 // StmtAST - Base class for all statement nodes.
@@ -34,7 +33,7 @@ class StmtAST : public AbstractAST {
 
   virtual void Codegen(peloton::codegen::CodeGen &codegen,
                        peloton::codegen::FunctionBuilder &fb,
-                       codegen::Value *dst) = 0;
+                       codegen::Value *dst, UDFContext *udf_context) = 0;
 };
 
 // ExprAST - Base class for all expression nodes.
@@ -44,7 +43,7 @@ class ExprAST : public StmtAST {
 
   virtual void Codegen(peloton::codegen::CodeGen &codegen,
                        peloton::codegen::FunctionBuilder &fb,
-                       codegen::Value *dst) = 0;
+                       codegen::Value *dst, UDFContext *udf_context) = 0;
 };
 
 // IntegerExprAST - Expression class for numeric literals like "1".
@@ -57,7 +56,8 @@ class IntegerExprAST : public ExprAST {
 
   void Codegen(
       peloton::codegen::CodeGen &codegen,
-      peloton::codegen::FunctionBuilder &fb, codegen::Value *dst) override;
+      peloton::codegen::FunctionBuilder &fb, codegen::Value *dst,
+      UDFContext *udf_context) override;
 };
 
 // DoubleExprAST - Expression class for numeric literals like "1.1".
@@ -69,7 +69,7 @@ class DoubleExprAST : public ExprAST {
 
   void Codegen(peloton::codegen::CodeGen &codegen,
                peloton::codegen::FunctionBuilder &fb,
-               codegen::Value *dst) override;
+               codegen::Value *dst, UDFContext *udf_context) override;
 };
 
 // VariableExprAST - Expression class for referencing a variable, like "a".
@@ -81,11 +81,15 @@ class VariableExprAST : public ExprAST {
 
   void Codegen(peloton::codegen::CodeGen &codegen,
                peloton::codegen::FunctionBuilder &fb,
-               codegen::Value *dst) override;
+               codegen::Value *dst, UDFContext *udf_context) override;
 
-  llvm::Value *GetAllocVal();
+  llvm::Value *GetAllocValue(UDFContext *udf_context) {
+    return udf_context->GetAllocValue(name);
+  }
 
-  type::TypeId GetVarType();
+  type::TypeId GetVarType(UDFContext *udf_context) {
+    return udf_context->GetVariableType(name);
+  }
 };
 
 // BinaryExprAST - Expression class for a binary operator.
@@ -100,7 +104,7 @@ class BinaryExprAST : public ExprAST {
 
   void Codegen(peloton::codegen::CodeGen &codegen,
                peloton::codegen::FunctionBuilder &fb,
-               codegen::Value *dst) override;
+               codegen::Value *dst, UDFContext *udf_context) override;
 };
 
 // CallExprAST - Expression class for function calls.
@@ -108,12 +112,12 @@ class CallExprAST : public ExprAST {
   std::string callee;
   std::vector<std::unique_ptr<ExprAST>> args;
   std::string current_func;
-  std::vector<arg_type> args_type;
+  std::vector<type::TypeId> args_type;
 
  public:
   CallExprAST(const std::string &callee,
               std::vector<std::unique_ptr<ExprAST>> args,
-              std::string &current_func, std::vector<arg_type> args_type)
+              std::string &current_func, std::vector<type::TypeId> &args_type)
       : callee(callee), args(std::move(args)) {
     current_func = current_func;
     args_type = args_type;
@@ -121,7 +125,7 @@ class CallExprAST : public ExprAST {
 
   void Codegen(peloton::codegen::CodeGen &codegen,
                peloton::codegen::FunctionBuilder &fb,
-               codegen::Value *dst) override;
+               codegen::Value *dst, UDFContext *udf_context) override;
 };
 
 // SeqStmtAST - Statement class for sequence of statements
@@ -134,7 +138,7 @@ class SeqStmtAST : public StmtAST {
 
   void Codegen(peloton::codegen::CodeGen &codegen,
                peloton::codegen::FunctionBuilder &fb,
-               codegen::Value *dst) override;
+               codegen::Value *dst, UDFContext *udf_context) override;
 };
 
 // DeclStmtAST - Statement class for sequence of statements
@@ -148,7 +152,7 @@ class DeclStmtAST : public StmtAST {
 
   void Codegen(peloton::codegen::CodeGen &codegen,
                peloton::codegen::FunctionBuilder &fb,
-               codegen::Value *dst) override;
+               codegen::Value *dst, UDFContext *udf_context) override;
 };
 
 // IfStmtAST - Statement class for if/then/else.
@@ -166,7 +170,7 @@ class IfStmtAST : public ExprAST {
 
   void Codegen(peloton::codegen::CodeGen &codegen,
                peloton::codegen::FunctionBuilder &fb,
-               codegen::Value *dst) override;
+               codegen::Value *dst, UDFContext *udf_context) override;
 };
 
 // WhileAST - Statement class for while loop
@@ -181,7 +185,7 @@ class WhileStmtAST : public ExprAST {
 
   void Codegen(peloton::codegen::CodeGen &codegen,
                peloton::codegen::FunctionBuilder &fb,
-               codegen::Value *dst) override;
+               codegen::Value *dst, UDFContext *udf_context) override;
 };
 
 // RetStmtAST - Statement class for sequence of statements
@@ -193,7 +197,7 @@ class RetStmtAST : public StmtAST {
 
   void Codegen(peloton::codegen::CodeGen &codegen,
                peloton::codegen::FunctionBuilder &fb,
-               codegen::Value *dst) override;
+               codegen::Value *dst, UDFContext *udf_context) override;
 };
 
 // AssignStmtAST - Expression class for a binary operator.
@@ -208,7 +212,8 @@ class AssignStmtAST : public ExprAST {
 
   void Codegen(
       peloton::codegen::CodeGen &codegen,
-      peloton::codegen::FunctionBuilder &fb, codegen::Value *dst) override;
+      peloton::codegen::FunctionBuilder &fb, codegen::Value *dst,
+      UDFContext *udf_context) override;
 };
 
 
@@ -222,7 +227,8 @@ class FunctionAST {
       body(std::move(body)), ret_type(std::move(ret_type)) {}
 
   llvm::Function *Codegen(peloton::codegen::CodeGen &codegen,
-                          peloton::codegen::FunctionBuilder &fb);
+                          peloton::codegen::FunctionBuilder &fb,
+                          UDFContext *udf_context);
 };
 
 /*----------------------------------------------------------------
