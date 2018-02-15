@@ -63,7 +63,7 @@ std::unique_ptr<FunctionAST> PLpgSQLParser::ParsePLpgSQL(
 
   const auto function = function_list[0][kPLpgSQL_function];
   std::unique_ptr<FunctionAST> function_ast(
-      new FunctionAST(ParseFunction(function)));
+      new FunctionAST(ParseFunction(function), type::TypeId::DECIMAL));
   return function_ast;
 }
 
@@ -136,9 +136,19 @@ std::unique_ptr<StmtAST> PLpgSQLParser::ParseDecl(const Json::Value decl) {
 
   if (decl_names[0] == kPLpgSQL_var) {
     variable.push_back(decl[kPLpgSQL_var][kRefname].asString());
-    return std::unique_ptr<DeclStmtAST>(new DeclStmtAST(
-        decl[kPLpgSQL_var][kRefname].asString(),
-        decl[kPLpgSQL_var][kDatatype][kPLpgSQL_type][kTypname].asString()));
+    auto name = decl[kPLpgSQL_var][kRefname].asString();
+    auto type =
+        decl[kPLpgSQL_var][kDatatype][kPLpgSQL_type][kTypname].asString();
+    if (type == "integer") {
+      return std::unique_ptr<DeclStmtAST>(
+          new DeclStmtAST(name, type::TypeId::INTEGER));
+    } else if (type == "double") {
+      return std::unique_ptr<DeclStmtAST>(
+          new DeclStmtAST(name, type::TypeId::DECIMAL));
+    } else {
+      return std::unique_ptr<DeclStmtAST>(
+          new DeclStmtAST(name, type::TypeId::INVALID));
+    }
   } else {
     // TODO[Siva]: need to handle other types like row, table etc;
     throw Exception("Declaration type not supported : " + decl_names[0]);
@@ -229,13 +239,20 @@ std::unique_ptr<ExprAST> PLpgSQLParser::ParseExpr(
     auto value =
         reinterpret_cast<const expression::ConstantValueExpression *>(expr)
             ->GetValue();
-    // TODO(boweic): support other types
-    if (!value.CheckInteger()) {
-      throw Exception("PLpgSQLParser : Type " + value.GetInfo() +
-                      " Not supported");
+
+    switch (value.GetTypeId()) {
+      case type::TypeId::INTEGER : {
+        return std::unique_ptr<IntegerExprAST>(
+            new IntegerExprAST(value.GetAs<int>()));
+      }
+      case type::TypeId::DECIMAL : {
+        return std::unique_ptr<DoubleExprAST>(
+            new DoubleExprAST(value.GetAs<double>()));
+      }
+      default : 
+        throw Exception("PLpgSQLParser : Type " + value.GetInfo() +
+                        " Not supported");
     }
-    return std::unique_ptr<NumberExprAST>(
-        new NumberExprAST(value.GetAs<int>()));
   }
   throw Exception("PL/pgSQL parser : Expression type not supported");
 }

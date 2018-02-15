@@ -9,6 +9,9 @@ namespace peloton {
 namespace udf {
 
 std::map<std::string, llvm::Value *> variable_alloc;
+// TODO[Siva]: This needs to be moved to Symbol Table and should be done during
+// Parsing and not code generation
+std::map<std::string, type::TypeId> variable_type;
 
 // Codegen for SeqStmtAST
 void SeqStmtAST::Codegen(codegen::CodeGen &codegen,
@@ -30,12 +33,40 @@ void DeclStmtAST::Codegen(
     peloton::codegen::CodeGen &codegen,
     UNUSED_ATTRIBUTE peloton::codegen::FunctionBuilder &fb,
     UNUSED_ATTRIBUTE codegen::Value *dst) {
-  variable_alloc[name] = codegen.AllocateVariable(codegen.DoubleType(), name);
+  switch (type) {
+    case type::TypeId::INTEGER : {
+      // TODO[Siva]: 32 / 64 bit handling?? 
+      variable_alloc[name] = codegen.AllocateVariable(codegen.Int64Type(),
+                                                      name);
+      break;
+    }
+    case type::TypeId::DECIMAL : {
+      variable_alloc[name] = codegen.AllocateVariable(codegen.DoubleType(),
+                                                      name);
+      break;
+    }
+    default : {
+      // TODO[Siva]: Should throw an excpetion, but need to figure out "found"
+      // and other internal types first.
+    }
+  }
+  variable_type[name] = type;
   return;
 }
 
-// Codegen for NumberExprAST
-void NumberExprAST::Codegen(
+// Codegen for IntegerExprAST
+void IntegerExprAST::Codegen(
+    peloton::codegen::CodeGen &codegen,
+    UNUSED_ATTRIBUTE peloton::codegen::FunctionBuilder &fb,
+    codegen::Value *dst) {
+  *dst = peloton::codegen::Value(
+      peloton::codegen::type::Type(type::TypeId::INTEGER, false),
+      codegen.Const64(val));
+  return;
+}
+
+// Codegen for DoubleExprAST
+void DoubleExprAST::Codegen(
     peloton::codegen::CodeGen &codegen,
     UNUSED_ATTRIBUTE peloton::codegen::FunctionBuilder &fb,
     codegen::Value *dst) {
@@ -50,16 +81,16 @@ void VariableExprAST::Codegen(
     UNUSED_ATTRIBUTE peloton::codegen::CodeGen &codegen,
     peloton::codegen::FunctionBuilder &fb, codegen::Value *dst) {
   llvm::Value *val = fb.GetArgumentByName(name);
-
+  type::TypeId type = variable_type[name];
+  //TODO[Siva]: Support Integers for arguments as well
   if (val) {
     *dst = peloton::codegen::Value(
         peloton::codegen::type::Type(type::TypeId::DECIMAL, false), val);
     return;
   } else {
     // Assuming each variable is defined
-    *dst = peloton::codegen::Value(
-        peloton::codegen::type::Type(type::TypeId::DECIMAL, false),
-        codegen->CreateLoad(variable_alloc[name]));
+    *dst = peloton::codegen::Value(peloton::codegen::type::Type(type, false),
+                                   codegen->CreateLoad(variable_alloc[name]));
     return;
   }
   return;
@@ -67,19 +98,11 @@ void VariableExprAST::Codegen(
 
 llvm::Value *VariableExprAST::GetAllocVal() { return variable_alloc[name]; }
 
+type::TypeId VariableExprAST::GetVarType() { return variable_type[name]; }
+
 // Codegen for BinaryExprAST
 void BinaryExprAST::Codegen(codegen::CodeGen &codegen,
                             codegen::FunctionBuilder &fb, codegen::Value *dst) {
-  // if (op == '=') {
-  //   auto *right_val = (rhs->Codegen(codegen, fb)).GetValue();
-  //   // VariableExprAST *var_exp = dynamic_cast<VariableExprAST*>(lhs);
-  //   // auto *left_val = lhs->GetAllocVal();
-  //   auto *left_val = variable_alloc["x"];
-  //   auto *ret_val = codegen->CreateStore(right_val, left_val);
-  //   return peloton::codegen::Value(
-  //       peloton::codegen::type::Type(type::TypeId::DECIMAL, false), ret_val);
-  // }
-
   codegen::Value left;
   lhs->Codegen(codegen, fb, &left);
   codegen::Value right;
@@ -196,7 +219,8 @@ void IfStmtAST::Codegen(codegen::CodeGen &codegen, codegen::FunctionBuilder &fb,
 }
 
 void WhileStmtAST::Codegen(codegen::CodeGen &codegen,
-                           codegen::FunctionBuilder &fb, codegen::Value *dst) {
+                           codegen::FunctionBuilder &fb,
+                           UNUSED_ATTRIBUTE codegen::Value *dst) {
   PL_ASSERT(dst == nullptr);
   // TODO(boweic): Use boolean when supported
   auto compare_value =
@@ -232,7 +256,6 @@ void WhileStmtAST::Codegen(codegen::CodeGen &codegen,
 void RetStmtAST::Codegen(codegen::CodeGen &codegen,
                          UNUSED_ATTRIBUTE codegen::FunctionBuilder &fb,
                          UNUSED_ATTRIBUTE codegen::Value *dst) {
-  peloton::codegen::Value decl_codegen_val;
   // TODO[Siva]: Will need to add more checks to ensure that this is done
   // Handle when supporting types
   if (expr == nullptr) {
@@ -246,6 +269,13 @@ void RetStmtAST::Codegen(codegen::CodeGen &codegen,
   } else {
     codegen::Value expr_ret_val;
     expr->Codegen(codegen, fb, &expr_ret_val);
+
+    if(expr_ret_val.GetType() != 
+       peloton::codegen::type::Type(type::TypeId::DECIMAL, false)) {
+      expr_ret_val = expr_ret_val.CastTo(codegen,
+        codegen::type::Type(type::TypeId::DECIMAL, false));
+    }
+
     codegen->CreateRet(expr_ret_val.GetValue());
   }
   return;
@@ -255,16 +285,26 @@ void RetStmtAST::Codegen(codegen::CodeGen &codegen,
 void AssignStmtAST::Codegen(codegen::CodeGen &codegen,
                             UNUSED_ATTRIBUTE codegen::FunctionBuilder &fb,
                             UNUSED_ATTRIBUTE codegen::Value *dst) {
-  codegen::Value right_val;
-  rhs->Codegen(codegen, fb, &right_val);
+  codegen::Value right_codegen_val;
+  rhs->Codegen(codegen, fb, &right_codegen_val);
   auto *left_val = lhs->GetAllocVal();
-  codegen->CreateStore(right_val.GetValue(), left_val);
+  auto right_type = right_codegen_val.GetType();
+  auto left_type = codegen::type::Type(lhs->GetVarType(), false);
+
+  if(right_type != left_type) {
+    // TODO[Siva]: Need to check that they can be casted in semantic analysis
+    right_codegen_val = right_codegen_val.CastTo(codegen,
+        codegen::type::Type(lhs->GetVarType(), false));
+  }
+
+  codegen->CreateStore(right_codegen_val.GetValue(), left_val);
 }
 
 // Codegen for FunctionAST
 llvm::Function *FunctionAST::Codegen(peloton::codegen::CodeGen &codegen,
                                      peloton::codegen::FunctionBuilder &fb) {
   variable_alloc.clear();
+  variable_type.clear();
   body->Codegen(codegen, fb, nullptr);
   fb.Finish();
   return fb.GetFunction();

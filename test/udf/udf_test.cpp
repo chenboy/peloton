@@ -268,8 +268,8 @@ TEST_F(UDFTest, LoopTest) {
   TestingSQLUtil::ExecuteSQLQuery(
       " CREATE OR REPLACE FUNCTION ret_in_loop(i double) RETURNS double AS $$ "
       " DECLARE "
-      "   j double; "
-      "   ret double; "
+      "   j integer; "
+      "   ret integer; "
       " BEGIN "
       "   j = 0; "
       "   ret = 1; "
