@@ -2,6 +2,7 @@
 #include <iostream>  ////TODO(PP) Remove
 #include "catalog/catalog.h"
 #include "codegen/lang/if.h"
+#include "codegen/lang/loop.h"
 #include "codegen/type/type.h"
 
 namespace peloton {
@@ -17,6 +18,10 @@ void SeqStmtAST::Codegen(codegen::CodeGen &codegen,
                          codegen::FunctionBuilder &fb,
                          UNUSED_ATTRIBUTE codegen::Value *dst) {
   for (uint32_t i = 0; i < stmts.size(); i++) {
+    // If already return in the current block, don't continue to generate
+    if (codegen.IsTerminated()) {
+      break;
+    }
     stmts[i]->Codegen(codegen, fb, nullptr);
   }
 
@@ -213,15 +218,47 @@ void IfStmtAST::Codegen(codegen::CodeGen &codegen, codegen::FunctionBuilder &fb,
   return;
 }
 
+void WhileStmtAST::Codegen(codegen::CodeGen &codegen,
+                           codegen::FunctionBuilder &fb,
+                           UNUSED_ATTRIBUTE codegen::Value *dst) {
+  PL_ASSERT(dst == nullptr);
+  // TODO(boweic): Use boolean when supported
+  auto compare_value =
+      peloton::codegen::Value(codegen::type::Type(type::TypeId::DECIMAL, false),
+                              codegen.ConstDouble(1.0));
+
+  peloton::codegen::Value cond_expr_value;
+  cond_expr->Codegen(codegen, fb, &cond_expr_value);
+
+  // Codegen If condition expression
+  codegen::lang::Loop loop{
+      codegen,
+      cond_expr_value.CompareEq(codegen, compare_value).GetValue(),
+      {}};
+  {
+    body_stmt->Codegen(codegen, fb, nullptr);
+    // TODO(boweic): Use boolean when supported
+    auto compare_value = peloton::codegen::Value(
+        codegen::type::Type(type::TypeId::DECIMAL, false),
+        codegen.ConstDouble(1.0));
+    codegen::Value cond_expr_value;
+    codegen::Value cond_var;
+    if (!codegen.IsTerminated()) {
+      cond_expr->Codegen(codegen, fb, &cond_expr_value);
+      cond_var = cond_expr_value.CompareEq(codegen, compare_value);
+    }
+    loop.LoopEnd(cond_var.GetValue(), {});
+  }
+
+  return;
+}
 // Codegen for RetStmtAST
 void RetStmtAST::Codegen(codegen::CodeGen &codegen,
                          UNUSED_ATTRIBUTE codegen::FunctionBuilder &fb,
                          UNUSED_ATTRIBUTE codegen::Value *dst) {
-  peloton::codegen::Value decl_codegen_val;
   // TODO[Siva]: Will need to add more checks to ensure that this is done
   // Handle when supporting types
   if (expr == nullptr) {
-    // codegen->CreateRetVoid();
     // TODO(boweic): We should deduce type in typechecking phase and create a
     // default value for that type, or find a way to get around llvm basic block
     // without return
@@ -232,6 +269,13 @@ void RetStmtAST::Codegen(codegen::CodeGen &codegen,
   } else {
     codegen::Value expr_ret_val;
     expr->Codegen(codegen, fb, &expr_ret_val);
+
+    if(expr_ret_val.GetType() != 
+       peloton::codegen::type::Type(type::TypeId::DECIMAL, false)) {
+      expr_ret_val = expr_ret_val.CastTo(codegen,
+        codegen::type::Type(type::TypeId::DECIMAL, false));
+    }
+
     codegen->CreateRet(expr_ret_val.GetValue());
   }
   return;
