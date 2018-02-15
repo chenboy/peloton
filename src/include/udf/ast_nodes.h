@@ -47,12 +47,25 @@ class ExprAST : public StmtAST {
       peloton::codegen::FunctionBuilder &fb, codegen::Value *dst) = 0;
 };
 
-// NumberExprAST - Expression class for numeric literals like "1.0".
-class NumberExprAST : public ExprAST {
-  int val;
+// IntegerExprAST - Expression class for numeric literals like "1".
+class IntegerExprAST : public ExprAST {
+  // TODO[Siva]: Codegen supports only unsigned int?
+  uint64_t val;
 
  public:
-  NumberExprAST(int val) : val(val) {}
+  IntegerExprAST(uint64_t val) : val(val) {}
+
+  void Codegen(
+      peloton::codegen::CodeGen &codegen,
+      peloton::codegen::FunctionBuilder &fb, codegen::Value *dst) override;
+};
+
+// DoubleExprAST - Expression class for numeric literals like "1.1".
+class DoubleExprAST : public ExprAST {
+  double val;
+
+ public:
+  DoubleExprAST(double val) : val(val) {}
 
   void Codegen(
       peloton::codegen::CodeGen &codegen,
@@ -71,6 +84,8 @@ class VariableExprAST : public ExprAST {
       peloton::codegen::FunctionBuilder &fb, codegen::Value *dst) override;
 
   llvm::Value *GetAllocVal();
+
+  type::TypeId GetVarType();
 };
 
 // BinaryExprAST - Expression class for a binary operator.
@@ -125,10 +140,10 @@ class SeqStmtAST : public StmtAST {
 // DeclStmtAST - Statement class for sequence of statements
 class DeclStmtAST : public StmtAST {
   std::string name;
-  std::string type;
+  type::TypeId type;
 
  public:
-  DeclStmtAST(std::string name, std::string type)
+  DeclStmtAST(std::string name, type::TypeId type)
       : name(std::move(name)), type(std::move(type)) {}
 
   void Codegen(
