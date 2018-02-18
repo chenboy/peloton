@@ -266,13 +266,13 @@ TEST_F(UDFTest, LoopTest) {
       " LANGUAGE plpgsql;");
 
   TestingSQLUtil::ExecuteSQLQuery(
-      " CREATE OR REPLACE FUNCTION ret_in_loop(i double) RETURNS double AS $$ "
+      " CREATE OR REPLACE FUNCTION ret_in_loop(i integer) RETURNS integer AS $$ "
       " DECLARE "
       "   j integer; "
       "   ret integer; "
       " BEGIN "
       "   j = 0; "
-      "   ret = 1; "
+      "   ret = i; "
       "   WHILE j < i LOOP "
       "     ret = ret * 2; "
       "     RETURN ret;"
@@ -280,11 +280,11 @@ TEST_F(UDFTest, LoopTest) {
       "   RETURN ret;"
       " END; $$ "
       " LANGUAGE plpgsql;");
-  TestingSQLUtil::ExecuteSQLQuery("CREATE TABLE foo(income double);");
+  TestingSQLUtil::ExecuteSQLQuery("CREATE TABLE foo(income double, id integer);");
 
-  TestingSQLUtil::ExecuteSQLQuery("INSERT into foo values(2.0);");
+  TestingSQLUtil::ExecuteSQLQuery("INSERT into foo values(2.0, 2);");
 
-  TestingSQLUtil::ExecuteSQLQuery("INSERT into foo values(3.0);");
+  TestingSQLUtil::ExecuteSQLQuery("INSERT into foo values(3.0, 4);");
 
   txn_manager.CommitTransaction(txn);
   // Fetch values from the table
@@ -308,13 +308,13 @@ TEST_F(UDFTest, LoopTest) {
     EXPECT_DOUBLE_EQ(income, (outputs[i]));
   }
 
-  testQuery = "select ret_in_loop(income) from foo;";
+  testQuery = "select ret_in_loop(id) from foo;";
 
   TestingSQLUtil::ExecuteSQLQuery(testQuery.c_str(), result, tuple_descriptor,
                                   rows_affected, error_message);
   outputs.clear();
-  outputs.push_back(2.0);
-  outputs.push_back(2.0);
+  outputs.push_back(4);
+  outputs.push_back(8);
 
   for (i = 0; i < 2; i++) {
     std::string result_income(

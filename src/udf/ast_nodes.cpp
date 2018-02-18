@@ -30,10 +30,12 @@ void DeclStmtAST::Codegen(
     UNUSED_ATTRIBUTE peloton::codegen::FunctionBuilder &fb,
     UNUSED_ATTRIBUTE codegen::Value *dst, UDFContext *udf_context) {
   switch (type) {
+    // TODO[Siva]: Replace with this a function that returns llvm::Type from
+    // type::TypeID
     case type::TypeId::INTEGER : {
       // TODO[Siva]: 32 / 64 bit handling?? 
       udf_context->SetAllocValue(name,
-          codegen.AllocateVariable(codegen.Int64Type(), name));
+          codegen.AllocateVariable(codegen.Int32Type(), name));
       break;
     }
     case type::TypeId::DECIMAL : {
@@ -56,7 +58,7 @@ void IntegerExprAST::Codegen(
     codegen::Value *dst, UNUSED_ATTRIBUTE UDFContext *udf_context) {
   *dst = peloton::codegen::Value(
       peloton::codegen::type::Type(type::TypeId::INTEGER, false),
-      codegen.Const64(val));
+      codegen.Const32(val));
   return;
 }
 
@@ -81,7 +83,7 @@ void VariableExprAST::Codegen(
   //TODO[Siva]: Support Integers for arguments as well
   if (val) {
     *dst = peloton::codegen::Value(
-        peloton::codegen::type::Type(type::TypeId::DECIMAL, false), val);
+        peloton::codegen::type::Type(type, false), val);
     return;
   } else {
     // Assuming each variable is defined
@@ -144,8 +146,7 @@ void BinaryExprAST::Codegen(codegen::CodeGen &codegen,
       return;
     }
     default:
-      // TODO(boweic): Throw an exception
-      return;
+      throw Exception("BinaryExprAST : Operator not supported");
   }
 }
 
@@ -248,29 +249,29 @@ void WhileStmtAST::Codegen(codegen::CodeGen &codegen,
 
   return;
 }
+
 // Codegen for RetStmtAST
 void RetStmtAST::Codegen(codegen::CodeGen &codegen,
                          UNUSED_ATTRIBUTE codegen::FunctionBuilder &fb,
                          UNUSED_ATTRIBUTE codegen::Value *dst,
                          UDFContext *udf_context) {
-  // TODO[Siva]: Will need to add more checks to ensure that this is done
-  // Handle when supporting types
+  // TODO[Siva]: Handle void properly
   if (expr == nullptr) {
     // TODO(boweic): We should deduce type in typechecking phase and create a
     // default value for that type, or find a way to get around llvm basic block
     // without return
     codegen::Value value = peloton::codegen::Value(
-        peloton::codegen::type::Type(type::TypeId::DECIMAL, false),
-        codegen.ConstDouble(0));
+        peloton::codegen::type::Type(udf_context->GetFunctionReturnType(),
+                                     false), codegen.ConstDouble(0));
     codegen->CreateRet(value.GetValue());
   } else {
     codegen::Value expr_ret_val;
     expr->Codegen(codegen, fb, &expr_ret_val, udf_context);
 
-    if(expr_ret_val.GetType() != 
-       peloton::codegen::type::Type(type::TypeId::DECIMAL, false)) {
+    if(expr_ret_val.GetType() !=  peloton::codegen::type::Type(
+          udf_context->GetFunctionReturnType(), false)) {
       expr_ret_val = expr_ret_val.CastTo(codegen,
-        codegen::type::Type(type::TypeId::DECIMAL, false));
+        codegen::type::Type(udf_context->GetFunctionReturnType(), false));
     }
 
     codegen->CreateRet(expr_ret_val.GetValue());

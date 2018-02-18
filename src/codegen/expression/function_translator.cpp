@@ -13,9 +13,11 @@
 #include "codegen/expression/function_translator.h"
 
 #include "codegen/type/decimal_type.h"
+#include "codegen/type/integer_type.h"
 #include "codegen/type/sql_type.h"
 #include "codegen/type/type_system.h"
 #include "expression/function_expression.h"
+#include "type/type_id.h"
 #include "udf/udf_handler.h"
 
 namespace peloton {
@@ -104,9 +106,22 @@ codegen::Value FunctionTranslator::DeriveValue(CodeGen &codegen,
 
     auto call_ret = codegen.CallFunc(func_ptr, raw_args);
 
-    // TODO(PP): Should be changed to accomodate any return type
-    return codegen::Value{type::Decimal::Instance(), call_ret, nullptr,
+    auto return_type = func_expr.GetValueType();
+
+    // TODO[Siva]: Support more datatypes for return value
+    switch (return_type) {
+      case peloton::type::TypeId::DECIMAL : {
+        return codegen::Value{type::Decimal::Instance(), call_ret, nullptr,
                           nullptr};
+      }
+      case peloton::type::TypeId::INTEGER : {
+        return codegen::Value{type::Integer::Instance(), call_ret, nullptr,
+                          nullptr};
+      }
+      default : {
+        throw Exception("FunctionTranslator : Return type not supported");
+      }
+    }
   }
 }
 

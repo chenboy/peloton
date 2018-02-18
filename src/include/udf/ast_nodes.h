@@ -220,11 +220,9 @@ class AssignStmtAST : public ExprAST {
 // FunctionAST - This class represents a function definition itself.
 class FunctionAST {
   std::unique_ptr<StmtAST> body;
-  type::TypeId ret_type;
 
  public:
-  FunctionAST(std::unique_ptr<StmtAST> body, type::TypeId ret_type) :
-      body(std::move(body)), ret_type(std::move(ret_type)) {}
+  FunctionAST(std::unique_ptr<StmtAST> body) : body(std::move(body)) {}
 
   llvm::Function *Codegen(peloton::codegen::CodeGen &codegen,
                           peloton::codegen::FunctionBuilder &fb,

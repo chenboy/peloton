@@ -24,7 +24,7 @@ llvm::Function *UDFHandler::RegisterExternalFunction(
 
   // Construct the new functionType in this context
   llvm::Type *llvm_ret_type =
-      GetCodegenParamType(func_expr.GetValueType(), codegen);
+      GetCodegenType(func_expr.GetValueType(), codegen);
 
   // vector of pair of <argument name, argument type>
   std::vector<llvm::Type *> llvm_args;
@@ -33,7 +33,7 @@ llvm::Function *UDFHandler::RegisterExternalFunction(
   auto iterator_arg_type = args_type.begin();
 
   while (iterator_arg_type != args_type.end()) {
-    llvm_args.push_back(GetCodegenParamType(*iterator_arg_type, codegen));
+    llvm_args.push_back(GetCodegenType(*iterator_arg_type, codegen));
 
     ++iterator_arg_type;
   }
@@ -62,19 +62,20 @@ std::shared_ptr<codegen::CodeContext> UDFHandler::Compile(
   // codegen::CodeContext *code_context = new codegen::CodeContext();
   codegen::CodeGen cg{*code_context};
 
-  llvm::Type *llvm_ret_type = GetCodegenParamType(ret_type, cg);
+  llvm::Type *llvm_ret_type = GetCodegenType(ret_type, cg);
 
   // vector of pair of <argument name, argument type>
   std::vector<codegen::FunctionDeclaration::ArgumentInfo> llvm_args;
+  UDFContext udf_context(func_name, ret_type, args_type);
 
   auto iterator_arg_name = args_name.begin();
   auto iterator_arg_type = args_type.begin();
 
   while (iterator_arg_name != args_name.end() &&
          iterator_arg_type != args_type.end()) {
+    udf_context.SetVariableType(*iterator_arg_name, *iterator_arg_type);
     llvm_args.emplace_back(*iterator_arg_name,
-                           GetCodegenParamType(*iterator_arg_type, cg));
-
+                           GetCodegenType(*iterator_arg_type, cg));
     ++iterator_arg_name;
     ++iterator_arg_type;
   }
@@ -82,8 +83,6 @@ std::shared_ptr<codegen::CodeContext> UDFHandler::Compile(
   // Construct the Function Builder object
   codegen::FunctionBuilder fb{*code_context, func_name, llvm_ret_type,
                               llvm_args};
-
-  UDFContext udf_context(func_name, ret_type, args_type);
 
   // Construct UDF Parser Object
   // std::unique_ptr<UDFParser> parser(new UDFParser(txn));
@@ -109,16 +108,19 @@ std::shared_ptr<codegen::CodeContext> UDFHandler::Compile(
   return code_context;
 }
 
-llvm::Type *UDFHandler::GetCodegenParamType(arg_type type_val,
+llvm::Type *UDFHandler::GetCodegenType(type::TypeId type_val,
                                             peloton::codegen::CodeGen &cg) {
-  // TODO(PP) : Add more types later
-  if (type_val == type::TypeId::INTEGER) {
-    return cg.Int32Type();
-  } else if (type_val == type::TypeId::DECIMAL) {
-    return cg.DoubleType();
-  } else {
-    // For now assume it to be a bool to keep compiler happy
-    throw Exception("UDFHandler : Expression type not supported");
+  // TODO[Siva]: Add more types later
+  switch (type_val) {
+    case type::TypeId::INTEGER : {
+      return cg.Int32Type();
+    } 
+    case type::TypeId::DECIMAL : {
+      return cg.DoubleType();
+    }
+    default : {
+      throw Exception("UDFHandler : Expression type not supported");
+    }
   }
 }
 

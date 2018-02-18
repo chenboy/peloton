@@ -20,9 +20,14 @@ class UDFHandler {
       concurrency::TransactionContext *txn, std::string func_name,
       std::string func_body, std::vector<std::string> args_name,
       std::vector<arg_type> args_type, arg_type ret_type);
+
   llvm::Function *RegisterExternalFunction(
       peloton::codegen::CodeGen &codegen,
       const expression::FunctionExpression &func_expr);
+
+  // TODO[Siva]: Need to move this somewhere else
+  static llvm::Type *GetCodegenType(type::TypeId type_val,
+                                  peloton::codegen::CodeGen &cg);
 
  private:
   std::shared_ptr<codegen::CodeContext> Compile(
@@ -30,8 +35,6 @@ class UDFHandler {
       std::string func_body, std::vector<std::string> args_name,
       std::vector<arg_type> args_type, arg_type ret_type);
 
-  llvm::Type *GetCodegenParamType(arg_type type_val,
-                                  peloton::codegen::CodeGen &cg);
 };
 
 }  // namespace udf

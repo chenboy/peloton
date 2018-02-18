@@ -59,7 +59,7 @@ std::unique_ptr<FunctionAST> PLpgSQLParser::ParsePLpgSQL(
 
   const auto function = function_list[0][kPLpgSQL_function];
   std::unique_ptr<FunctionAST> function_ast(
-      new FunctionAST(ParseFunction(function), type::TypeId::DECIMAL));
+      new FunctionAST(ParseFunction(function)));
   return function_ast;
 }
 
@@ -235,7 +235,7 @@ std::unique_ptr<ExprAST> PLpgSQLParser::ParseExpr(
       args.push_back(ParseExpr(func_expr->GetChild(idx)));
     }
     auto func_name = udf_context_->GetFunctionName();
-    auto func_args = udf_context_->GetFunctionArgs();
+    auto func_args = udf_context_->GetFunctionArgsType();
     return std::unique_ptr<CallExprAST>(
         new CallExprAST(func_expr->GetFuncName(), std::move(args),
                         func_name, func_args));

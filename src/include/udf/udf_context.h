@@ -16,7 +16,7 @@ public:
   
   std::string GetFunctionName() { return func_name_; }
 
-  const std::vector<type::TypeId> &GetFunctionArgs() { return args_type_; }
+  const std::vector<type::TypeId> &GetFunctionArgsType() { return args_type_; }
 
   void SetFunctionReturnType(type::TypeId type) { func_ret_type_ = type; }
   
