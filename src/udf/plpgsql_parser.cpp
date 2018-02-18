@@ -107,8 +107,8 @@ std::unique_ptr<StmtAST> PLpgSQLParser::ParseBlock(const Json::Value block) {
       stmts.push_back(ParseIf(stmt[kPLpgSQL_stmt_if]));
     } else if (stmt_names[0] == kPLpgSQL_stmt_assign) {
       // TODO[Siva]: Need to fix Assignment expression / statement
-      std::unique_ptr<VariableExprAST> lhs(new VariableExprAST(
-          udf_context_->GetVariableAtIndex(
+      std::unique_ptr<VariableExprAST> lhs(
+          new VariableExprAST(udf_context_->GetVariableAtIndex(
               stmt[kPLpgSQL_stmt_assign][kVarno].asInt())));
       auto rhs = ParseExprSQL(
           stmt[kPLpgSQL_stmt_assign][kExpr][kPLpgSQL_expr][kQuery].asString());
@@ -204,28 +204,9 @@ std::unique_ptr<ExprAST> PLpgSQLParser::ParseExpr(
                  expr->GetExpressionType()) ||
              expr->GetExpressionType() == ExpressionType::COMPARE_LESSTHAN ||
              expr->GetExpressionType() == ExpressionType::COMPARE_GREATERTHAN) {
-    switch (expr->GetExpressionType()) {
-      case ExpressionType::OPERATOR_PLUS:
-        return std::unique_ptr<BinaryExprAST>(new BinaryExprAST(
-            '+', ParseExpr(expr->GetChild(0)), ParseExpr(expr->GetChild(1))));
-      case ExpressionType::OPERATOR_MINUS:
-        return std::unique_ptr<BinaryExprAST>(new BinaryExprAST(
-            '-', ParseExpr(expr->GetChild(0)), ParseExpr(expr->GetChild(1))));
-      case ExpressionType::OPERATOR_MULTIPLY:
-        return std::unique_ptr<BinaryExprAST>(new BinaryExprAST(
-            '*', ParseExpr(expr->GetChild(0)), ParseExpr(expr->GetChild(1))));
-      case ExpressionType::OPERATOR_DIVIDE:
-        return std::unique_ptr<BinaryExprAST>(new BinaryExprAST(
-            '/', ParseExpr(expr->GetChild(0)), ParseExpr(expr->GetChild(1))));
-      case ExpressionType::COMPARE_LESSTHAN:
-        return std::unique_ptr<BinaryExprAST>(new BinaryExprAST(
-            '<', ParseExpr(expr->GetChild(0)), ParseExpr(expr->GetChild(1))));
-      case ExpressionType::COMPARE_GREATERTHAN:
-        return std::unique_ptr<BinaryExprAST>(new BinaryExprAST(
-            '>', ParseExpr(expr->GetChild(0)), ParseExpr(expr->GetChild(1))));
-      default:
-        PL_ASSERT(false);
-    }
+    return std::unique_ptr<BinaryExprAST>(new BinaryExprAST(
+        expr->GetExpressionType(), ParseExpr(expr->GetChild(0)),
+        ParseExpr(expr->GetChild(1))));
   } else if (expr->GetExpressionType() == ExpressionType::FUNCTION) {
     auto func_expr =
         reinterpret_cast<const expression::FunctionExpression *>(expr);
@@ -240,23 +221,9 @@ std::unique_ptr<ExprAST> PLpgSQLParser::ParseExpr(
         new CallExprAST(func_expr->GetFuncName(), std::move(args),
                         func_name, func_args));
   } else if (expr->GetExpressionType() == ExpressionType::VALUE_CONSTANT) {
-    auto value =
+    return std::unique_ptr<ValueExprAST>(new ValueExprAST(
         reinterpret_cast<const expression::ConstantValueExpression *>(expr)
-            ->GetValue();
-
-    switch (value.GetTypeId()) {
-      case type::TypeId::INTEGER : {
-        return std::unique_ptr<IntegerExprAST>(
-            new IntegerExprAST(value.GetAs<int>()));
-      }
-      case type::TypeId::DECIMAL : {
-        return std::unique_ptr<DoubleExprAST>(
-            new DoubleExprAST(value.GetAs<double>()));
-      }
-      default : 
-        throw Exception("PLpgSQLParser : Type " + value.GetInfo() +
-                        " Not supported");
-    }
+            ->GetValue()));
   }
   throw Exception("PL/pgSQL parser : Expression type not supported");
 }

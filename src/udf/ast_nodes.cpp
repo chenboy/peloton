@@ -38,12 +38,12 @@ void DeclStmtAST::Codegen(
           codegen.AllocateVariable(codegen.Int32Type(), name));
       break;
     }
-    case type::TypeId::DECIMAL : {
-      udf_context->SetAllocValue(name,
-          codegen.AllocateVariable(codegen.DoubleType(), name));
+    case type::TypeId::DECIMAL: {
+      udf_context->SetAllocValue(
+          name, codegen.AllocateVariable(codegen.DoubleType(), name));
       break;
     }
-    default : {
+    default: {
       // TODO[Siva]: Should throw an excpetion, but need to figure out "found"
       // and other internal types first.
     }
@@ -51,25 +51,28 @@ void DeclStmtAST::Codegen(
   return;
 }
 
-// Codegen for IntegerExprAST
-void IntegerExprAST::Codegen(
-    peloton::codegen::CodeGen &codegen,
-    UNUSED_ATTRIBUTE peloton::codegen::FunctionBuilder &fb,
-    codegen::Value *dst, UNUSED_ATTRIBUTE UDFContext *udf_context) {
-  *dst = peloton::codegen::Value(
-      peloton::codegen::type::Type(type::TypeId::INTEGER, false),
-      codegen.Const32(val));
-  return;
-}
 
 // Codegen for DoubleExprAST
-void DoubleExprAST::Codegen(
+void ValueExprAST::Codegen(
     peloton::codegen::CodeGen &codegen,
-    UNUSED_ATTRIBUTE peloton::codegen::FunctionBuilder &fb,
-    codegen::Value *dst, UNUSED_ATTRIBUTE UDFContext *udf_context) {
-  *dst = peloton::codegen::Value(
-      peloton::codegen::type::Type(type::TypeId::DECIMAL, false),
-      codegen.ConstDouble(val));
+    UNUSED_ATTRIBUTE peloton::codegen::FunctionBuilder &fb, codegen::Value *dst,
+    UNUSED_ATTRIBUTE UDFContext *udf_context) {
+  switch (value_.GetTypeId()) {
+    case type::TypeId::INTEGER: {
+      *dst = peloton::codegen::Value(
+          peloton::codegen::type::Type(type::TypeId::INTEGER, false),
+          codegen.Const32(value_.GetAs<int>()));
+      break;
+    }
+    case type::TypeId::DECIMAL: {
+      *dst = peloton::codegen::Value(
+          peloton::codegen::type::Type(type::TypeId::DECIMAL, false),
+          codegen.ConstDouble(value_.GetAs<double>()));
+      break;
+    }
+    default:
+      throw Exception("ValueExprAST::Codegen : Expression type not supported");
+  }
   return;
 }
 
@@ -80,14 +83,15 @@ void VariableExprAST::Codegen(
     UDFContext *udf_context) {
   llvm::Value *val = fb.GetArgumentByName(name);
   type::TypeId type = udf_context->GetVariableType(name);
-  //TODO[Siva]: Support Integers for arguments as well
+  // TODO[Siva]: Support Integers for arguments as well
   if (val) {
     *dst = peloton::codegen::Value(
         peloton::codegen::type::Type(type, false), val);
     return;
   } else {
     // Assuming each variable is defined
-    *dst = peloton::codegen::Value(peloton::codegen::type::Type(type, false),
+    *dst = peloton::codegen::Value(
+        peloton::codegen::type::Type(type, false),
         codegen->CreateLoad(udf_context->GetAllocValue(name)));
     return;
   }
@@ -107,39 +111,38 @@ void BinaryExprAST::Codegen(codegen::CodeGen &codegen,
     *dst = codegen::Value();
     return;
   }
-
   switch (op) {
     // TODO(boweic): Do not use string
-    case '+': {
+    case ExpressionType::OPERATOR_PLUS: {
       *dst = left.Add(codegen, right);
       return;
     }
-    case '-': {
+    case ExpressionType::OPERATOR_MINUS: {
       *dst = left.Sub(codegen, right);
       return;
     }
-    case '*': {
+    case ExpressionType::OPERATOR_MULTIPLY: {
       *dst = left.Mul(codegen, right);
       return;
     }
-    case '/': {
+    case ExpressionType::OPERATOR_DIVIDE: {
       *dst = left.Div(codegen, right);
       return;
     }
-    case '<': {
+    case ExpressionType::COMPARE_LESSTHAN: {
       auto val = left.CompareLt(codegen, right);
       // TODO(boweic): support boolean type
       *dst = val.CastTo(
           codegen, codegen::type::Type(peloton::type::TypeId::DECIMAL, false));
       return;
     }
-    case '>': {
+    case ExpressionType::COMPARE_GREATERTHAN: {
       auto val = left.CompareGt(codegen, right);
       *dst = val.CastTo(
           codegen, codegen::type::Type(peloton::type::TypeId::DECIMAL, false));
       return;
     }
-    case '=': {
+    case ExpressionType::COMPARE_EQUAL: {
       auto val = left.CompareEq(codegen, right);
       *dst = val.CastTo(
           codegen, codegen::type::Type(peloton::type::TypeId::DECIMAL, false));
@@ -290,10 +293,10 @@ void AssignStmtAST::Codegen(codegen::CodeGen &codegen,
   auto right_type = right_codegen_val.GetType();
   auto left_type = codegen::type::Type(lhs->GetVarType(udf_context), false);
 
-  if(right_type != left_type) {
+  if (right_type != left_type) {
     // TODO[Siva]: Need to check that they can be casted in semantic analysis
-    right_codegen_val = right_codegen_val.CastTo(codegen,
-        codegen::type::Type(lhs->GetVarType(udf_context), false));
+    right_codegen_val = right_codegen_val.CastTo(
+        codegen, codegen::type::Type(lhs->GetVarType(udf_context), false));
   }
 
   codegen->CreateStore(right_codegen_val.GetValue(), left_val);
