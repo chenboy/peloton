@@ -25,10 +25,6 @@ class UDFHandler {
       peloton::codegen::CodeGen &codegen,
       const expression::FunctionExpression &func_expr);
 
-  // TODO[Siva]: Need to move this somewhere else
-  static llvm::Type *GetCodegenType(type::TypeId type_val,
-                                  peloton::codegen::CodeGen &cg);
-
  private:
   std::shared_ptr<codegen::CodeContext> Compile(
       concurrency::TransactionContext *txn, std::string func_name,

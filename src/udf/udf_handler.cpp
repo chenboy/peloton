@@ -1,6 +1,7 @@
 #include "udf/plpgsql_parser.h"
 #include "udf/udf_handler.h"
 #include "udf/udf_context.h"
+#include "udf/util.h"
 
 namespace peloton {
 namespace udf {
@@ -24,7 +25,7 @@ llvm::Function *UDFHandler::RegisterExternalFunction(
 
   // Construct the new functionType in this context
   llvm::Type *llvm_ret_type =
-      GetCodegenType(func_expr.GetValueType(), codegen);
+      UDFUtil::GetCodegenType(func_expr.GetValueType(), codegen);
 
   // vector of pair of <argument name, argument type>
   std::vector<llvm::Type *> llvm_args;
@@ -33,7 +34,7 @@ llvm::Function *UDFHandler::RegisterExternalFunction(
   auto iterator_arg_type = args_type.begin();
 
   while (iterator_arg_type != args_type.end()) {
-    llvm_args.push_back(GetCodegenType(*iterator_arg_type, codegen));
+    llvm_args.push_back(UDFUtil::GetCodegenType(*iterator_arg_type, codegen));
 
     ++iterator_arg_type;
   }
@@ -62,7 +63,7 @@ std::shared_ptr<codegen::CodeContext> UDFHandler::Compile(
   // codegen::CodeContext *code_context = new codegen::CodeContext();
   codegen::CodeGen cg{*code_context};
 
-  llvm::Type *llvm_ret_type = GetCodegenType(ret_type, cg);
+  llvm::Type *llvm_ret_type = UDFUtil::GetCodegenType(ret_type, cg);
 
   // vector of pair of <argument name, argument type>
   std::vector<codegen::FunctionDeclaration::ArgumentInfo> llvm_args;
@@ -75,7 +76,7 @@ std::shared_ptr<codegen::CodeContext> UDFHandler::Compile(
          iterator_arg_type != args_type.end()) {
     udf_context.SetVariableType(*iterator_arg_name, *iterator_arg_type);
     llvm_args.emplace_back(*iterator_arg_name,
-                           GetCodegenType(*iterator_arg_type, cg));
+                           UDFUtil::GetCodegenType(*iterator_arg_type, cg));
     ++iterator_arg_name;
     ++iterator_arg_type;
   }
@@ -106,22 +107,6 @@ std::shared_ptr<codegen::CodeContext> UDFHandler::Compile(
   code_context->Compile();
 
   return code_context;
-}
-
-llvm::Type *UDFHandler::GetCodegenType(type::TypeId type_val,
-                                            peloton::codegen::CodeGen &cg) {
-  // TODO[Siva]: Add more types later
-  switch (type_val) {
-    case type::TypeId::INTEGER : {
-      return cg.Int32Type();
-    } 
-    case type::TypeId::DECIMAL : {
-      return cg.DoubleType();
-    }
-    default : {
-      throw Exception("UDFHandler : Expression type not supported");
-    }
-  }
 }
 
 }  // namespace udf

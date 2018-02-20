@@ -42,8 +42,8 @@ private:
   std::string func_name_;
   type::TypeId func_ret_type_;
   std::vector<type::TypeId> args_type_;
-  std::map<std::string, type::TypeId> symbol_table_;
-  std::map<std::string, llvm::Value *> named_values_;
+  std::unordered_map<std::string, type::TypeId> symbol_table_;
+  std::unordered_map<std::string, llvm::Value *> named_values_;
   std::vector<std::string> local_variables_;
 };
 

@@ -215,11 +215,8 @@ std::unique_ptr<ExprAST> PLpgSQLParser::ParseExpr(
     for (size_t idx = 0; idx < num_args; ++idx) {
       args.push_back(ParseExpr(func_expr->GetChild(idx)));
     }
-    auto func_name = udf_context_->GetFunctionName();
-    auto func_args = udf_context_->GetFunctionArgsType();
     return std::unique_ptr<CallExprAST>(
-        new CallExprAST(func_expr->GetFuncName(), std::move(args),
-                        func_name, func_args));
+        new CallExprAST(func_expr->GetFuncName(), std::move(args)));
   } else if (expr->GetExpressionType() == ExpressionType::VALUE_CONSTANT) {
     return std::unique_ptr<ValueExprAST>(new ValueExprAST(
         reinterpret_cast<const expression::ConstantValueExpression *>(expr)

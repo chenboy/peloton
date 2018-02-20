@@ -98,17 +98,11 @@ class BinaryExprAST : public ExprAST {
 class CallExprAST : public ExprAST {
   std::string callee;
   std::vector<std::unique_ptr<ExprAST>> args;
-  std::string current_func;
-  std::vector<type::TypeId> args_type;
 
  public:
   CallExprAST(const std::string &callee,
-              std::vector<std::unique_ptr<ExprAST>> args,
-              std::string &current_func, std::vector<type::TypeId> &args_type)
-      : callee(callee), args(std::move(args)) {
-    current_func = current_func;
-    args_type = args_type;
-  }
+              std::vector<std::unique_ptr<ExprAST>> args)
+      : callee(callee), args(std::move(args)) {}
 
   void Codegen(peloton::codegen::CodeGen &codegen,
                peloton::codegen::FunctionBuilder &fb, codegen::Value *dst,

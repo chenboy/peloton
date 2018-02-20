@@ -240,6 +240,53 @@ TEST_F(UDFTest, RecursiveFunctionTest) {
   txn_manager.CommitTransaction(txn);
 }
 
+TEST_F(UDFTest, FunctionTest) {
+  auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
+  auto txn = txn_manager.BeginTransaction();
+  catalog::Catalog::GetInstance()->CreateDatabase(DEFAULT_DB_NAME, txn);
+  catalog::Catalog::GetInstance()->Bootstrap();
+  txn_manager.CommitTransaction(txn);
+  // Create a txn
+  txn = txn_manager.BeginTransaction();
+
+  TestingSQLUtil::ExecuteSQLQuery(
+      "CREATE OR REPLACE FUNCTION mysqrt(i double)"
+      " RETURNS double AS $$ BEGIN RETURN sqrt(i); END; $$ LANGUAGE plpgsql;");
+
+  TestingSQLUtil::ExecuteSQLQuery("CREATE TABLE foo(income double);");
+
+  TestingSQLUtil::ExecuteSQLQuery("INSERT into foo values(10.0);");
+
+  TestingSQLUtil::ExecuteSQLQuery("INSERT into foo values(20.0);");
+
+  txn_manager.CommitTransaction(txn);
+
+  // Fetch values from the table
+  std::vector<ResultValue> result;
+  std::vector<FieldInfo> tuple_descriptor;
+  std::string error_message;
+  int rows_affected;
+  std::string testQuery = "select mysqrt(income) from foo;";
+
+  TestingSQLUtil::ExecuteSQLQuery(testQuery.c_str(), result, tuple_descriptor,
+                                  rows_affected, error_message);
+  std::vector<double> outputs;
+  outputs.push_back(3.16228);
+  outputs.push_back(4.47213999999999996);
+  int i;
+
+  for (i = 0; i < 2; i++) {
+    std::string result_income(
+        TestingSQLUtil::GetResultValueAsString(result, (i)));
+    double income = std::stod(result_income);
+    EXPECT_DOUBLE_EQ(income, (outputs[i]));
+  }
+  // free the database just created
+  txn = txn_manager.BeginTransaction();
+  catalog::Catalog::GetInstance()->DropDatabaseWithName(DEFAULT_DB_NAME, txn);
+  txn_manager.CommitTransaction(txn);
+}
+
 TEST_F(UDFTest, LoopTest) {
   auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
   auto txn = txn_manager.BeginTransaction();
@@ -266,7 +313,8 @@ TEST_F(UDFTest, LoopTest) {
       " LANGUAGE plpgsql;");
 
   TestingSQLUtil::ExecuteSQLQuery(
-      " CREATE OR REPLACE FUNCTION ret_in_loop(i integer) RETURNS integer AS $$ "
+      " CREATE OR REPLACE FUNCTION ret_in_loop(i integer) RETURNS integer AS "
+      "$$ "
       " DECLARE "
       "   j integer; "
       "   ret integer; "
@@ -280,7 +328,8 @@ TEST_F(UDFTest, LoopTest) {
       "   RETURN ret;"
       " END; $$ "
       " LANGUAGE plpgsql;");
-  TestingSQLUtil::ExecuteSQLQuery("CREATE TABLE foo(income double, id integer);");
+  TestingSQLUtil::ExecuteSQLQuery(
+      "CREATE TABLE foo(income double, id integer);");
 
   TestingSQLUtil::ExecuteSQLQuery("INSERT into foo values(2.0, 2);");
 
