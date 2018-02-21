@@ -194,8 +194,11 @@ void CallExprAST::Codegen(codegen::CodeGen &codegen,
       }
       auto *fn_type = llvm::FunctionType::get(ret_type, llvm_args, false);
       auto *func_ptr = llvm::Function::Create(
-          fn_type, llvm::Function::ExternalLinkage, func_data.func_name_,
+          fn_type, llvm::Function::ExternalLinkage, callee,
           &(codegen.GetCodeContext().GetModule()));
+      codegen.GetCodeContext().RegisterExternalFunction(
+          func_ptr, func_data.func_context_->GetRawFunctionPointer(
+                        func_data.func_context_->GetUDF()));
       auto call_ret = codegen.CallFunc(func_ptr, args_val);
       // TODO(boweic): Wrap this as a helper function since it could be reused
       switch (func_data.return_type_) {

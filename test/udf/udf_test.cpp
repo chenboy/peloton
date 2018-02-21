@@ -253,6 +253,10 @@ TEST_F(UDFTest, FunctionTest) {
       "CREATE OR REPLACE FUNCTION mysqrt(i double)"
       " RETURNS double AS $$ BEGIN RETURN sqrt(i); END; $$ LANGUAGE plpgsql;");
 
+  TestingSQLUtil::ExecuteSQLQuery(
+      "CREATE OR REPLACE FUNCTION callmysqrt(i double)"
+      " RETURNS double AS $$ BEGIN RETURN mysqrt(i); END; $$ LANGUAGE plpgsql;");
+
   TestingSQLUtil::ExecuteSQLQuery("CREATE TABLE foo(income double);");
 
   TestingSQLUtil::ExecuteSQLQuery("INSERT into foo values(10.0);");
@@ -266,7 +270,7 @@ TEST_F(UDFTest, FunctionTest) {
   std::vector<FieldInfo> tuple_descriptor;
   std::string error_message;
   int rows_affected;
-  std::string testQuery = "select mysqrt(income) from foo;";
+  std::string testQuery = "select callmysqrt(income) from foo;";
 
   TestingSQLUtil::ExecuteSQLQuery(testQuery.c_str(), result, tuple_descriptor,
                                   rows_affected, error_message);
