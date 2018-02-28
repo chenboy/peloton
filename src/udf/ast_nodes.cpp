@@ -6,6 +6,7 @@
 #include "codegen/type/decimal_type.h"
 #include "codegen/type/integer_type.h"
 #include "codegen/type/type.h"
+#include "udf/udf_code_generator.h"
 #include "udf/util.h"
 
 namespace peloton {
@@ -387,7 +388,8 @@ void AssignStmtAST::Codegen(codegen::CodeGen &codegen,
 llvm::Function *FunctionAST::Codegen(peloton::codegen::CodeGen &codegen,
                                      peloton::codegen::FunctionBuilder &fb,
                                      UDFContext *udf_context) {
-  body->Codegen(codegen, fb, nullptr, udf_context);
+  UDFCodeGenerator generator(&codegen, &fb, udf_context);
+  generator.GenerateUDF(body.get());
   fb.Finish();
   return fb.GetFunction();
 }
