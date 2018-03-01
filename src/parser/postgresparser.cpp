@@ -1142,14 +1142,17 @@ parser::SQLStatement *PostgresParser::CreateFunctionTransform(
   // FunctionParameter* parameters = root->parameters;
 
   result->func_parameters = new std::vector<FuncParameter *>();
-  for (auto cell = root->parameters->head; cell != nullptr; cell = cell->next) {
-    Node *node = reinterpret_cast<Node *>(cell->data.ptr_value);
-    if ((node->type) == T_FunctionParameter) {
-      // Transform Function Parameter
-      FuncParameter *funcpar_temp = FunctionParameterTransform(
-          reinterpret_cast<FunctionParameter *>(node));
 
-      result->func_parameters->push_back(funcpar_temp);
+  if(root->parameters != nullptr) {
+    for (auto cell = root->parameters->head; cell != nullptr; cell = cell->next) {
+      Node *node = reinterpret_cast<Node *>(cell->data.ptr_value);
+      if ((node->type) == T_FunctionParameter) {
+        // Transform Function Parameter
+        FuncParameter *funcpar_temp = FunctionParameterTransform(
+            reinterpret_cast<FunctionParameter *>(node));
+
+        result->func_parameters->push_back(funcpar_temp);
+      }
     }
   }
 

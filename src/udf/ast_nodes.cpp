@@ -176,7 +176,7 @@ void CallExprAST::Codegen(codegen::CodeGen &codegen,
 
   // Check if present in the current code context
   // Else, check the catalog and get it
-  llvm::Function *callee_func;
+  llvm::Function *callee_func = nullptr;
   if (callee == udf_context->GetFunctionName()) {
     // Recursive function call
     callee_func = fb.GetFunction();
