@@ -146,6 +146,10 @@ std::unique_ptr<StmtAST> PLpgSQLParser::ParseDecl(const Json::Value decl) {
       udf_context_->SetVariableType(var_name, type::TypeId::DECIMAL);
       return std::unique_ptr<DeclStmtAST>(
           new DeclStmtAST(name, type::TypeId::DECIMAL));
+    } else if(type == "varchar") {
+      udf_context_->SetVariableType(var_name, type::TypeId::VARCHAR);
+      return std::unique_ptr<DeclStmtAST>(
+          new DeclStmtAST(name, type::TypeId::VARCHAR));
     } else {
       udf_context_->SetVariableType(var_name, type::TypeId::INVALID);
       return std::unique_ptr<DeclStmtAST>(
