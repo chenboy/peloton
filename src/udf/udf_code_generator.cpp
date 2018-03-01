@@ -46,9 +46,9 @@ void UDFCodeGenerator::Visit(VariableExprAST *ast) {
     return;
   } else {
     // Assuming each variable is defined
+    auto *alloc_val = (udf_context_->GetAllocValue(ast->name)).GetValue();
     *dst_ = codegen::Value(
-        codegen::type::Type(type, false),
-        (*codegen_)->CreateLoad(udf_context_->GetAllocValue(ast->name)));
+        codegen::type::Type(type, false), (*codegen_)->CreateLoad(alloc_val));
     return;
   }
 }
@@ -232,15 +232,17 @@ void UDFCodeGenerator::Visit(DeclStmtAST *ast) {
     // type::TypeID
     case type::TypeId::INTEGER: {
       // TODO[Siva]: 32 / 64 bit handling??
-      udf_context_->SetAllocValue(
-          ast->name,
+      auto alloc_val = peloton::codegen::Value(
+          peloton::codegen::type::Type(type::TypeId::INTEGER, false),
           codegen_->AllocateVariable(codegen_->Int32Type(), ast->name));
+      udf_context_->SetAllocValue(ast->name, alloc_val);
       break;
     }
     case type::TypeId::DECIMAL: {
-      udf_context_->SetAllocValue(
-          ast->name,
+      auto alloc_val = peloton::codegen::Value(
+          peloton::codegen::type::Type(type::TypeId::DECIMAL, false),
           codegen_->AllocateVariable(codegen_->DoubleType(), ast->name));
+      udf_context_->SetAllocValue(ast->name, alloc_val);
       break;
     }
     default: {
@@ -344,7 +346,7 @@ void UDFCodeGenerator::Visit(AssignStmtAST *ast) {
   codegen::Value right_codegen_val;
   dst_ = &right_codegen_val;
   ast->rhs->Accept(this);
-  auto *left_val = ast->lhs->GetAllocValue(udf_context_);
+  auto *left_val = (ast->lhs->GetAllocValue(udf_context_)).GetValue();
   auto right_type = right_codegen_val.GetType();
   auto left_type =
       codegen::type::Type(ast->lhs->GetVarType(udf_context_), false);

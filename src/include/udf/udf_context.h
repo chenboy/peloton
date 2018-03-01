@@ -1,6 +1,6 @@
 #pragma once
 
-#include "llvm/IR/Value.h"
+#include "codegen/value.h"
 #include "type/type.h"
 
 namespace peloton {
@@ -28,11 +28,13 @@ public:
 
   type::TypeId GetVariableType(std::string &var) { return symbol_table_[var]; }
 
-  void SetAllocValue(std::string &var, llvm::Value *val) {
+  void SetAllocValue(std::string &var, peloton::codegen::Value val) {
     named_values_[var] = val;
   }
 
-  llvm::Value *GetAllocValue(std::string &var) { return named_values_[var]; }
+  peloton::codegen::Value GetAllocValue(std::string &var) {
+    return named_values_[var];
+  }
 
   void AddVariable(std::string name) { local_variables_.push_back(name); }
   
@@ -43,7 +45,7 @@ private:
   type::TypeId func_ret_type_;
   std::vector<type::TypeId> args_type_;
   std::unordered_map<std::string, type::TypeId> symbol_table_;
-  std::unordered_map<std::string, llvm::Value *> named_values_;
+  std::unordered_map<std::string, peloton::codegen::Value> named_values_;
   std::vector<std::string> local_variables_;
 };
 
