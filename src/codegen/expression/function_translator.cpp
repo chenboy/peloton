@@ -16,6 +16,7 @@
 #include "codegen/type/integer_type.h"
 #include "codegen/type/sql_type.h"
 #include "codegen/type/type_system.h"
+#include "codegen/type/varchar_type.h"
 #include "expression/function_expression.h"
 #include "type/type_id.h"
 #include "udf/udf_handler.h"
@@ -116,6 +117,12 @@ codegen::Value FunctionTranslator::DeriveValue(CodeGen &codegen,
       }
       case peloton::type::TypeId::INTEGER : {
         return codegen::Value{type::Integer::Instance(), call_ret, nullptr,
+                          nullptr};
+      }
+      case peloton::type::TypeId::VARCHAR : {
+        llvm::Value *str_ptr = codegen->CreateExtractValue(call_ret, 0);
+        llvm::Value *str_len = codegen->CreateExtractValue(call_ret, 1);
+        return codegen::Value{type::Varchar::Instance(), str_ptr, str_len,
                           nullptr};
       }
       default : {

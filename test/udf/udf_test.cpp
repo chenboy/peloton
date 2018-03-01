@@ -255,7 +255,9 @@ TEST_F(UDFTest, FunctionTest) {
 
   TestingSQLUtil::ExecuteSQLQuery(
       "CREATE OR REPLACE FUNCTION callmysqrt(i double)"
-      " RETURNS double AS $$ BEGIN RETURN mysqrt(i); END; $$ LANGUAGE plpgsql;");
+      " RETURNS double AS $$"
+      " DECLARE x double; BEGIN x := mysqrt(i); RETURN x; END;"
+      " $$ LANGUAGE plpgsql;");
 
   TestingSQLUtil::ExecuteSQLQuery("CREATE TABLE foo(income double);");
 

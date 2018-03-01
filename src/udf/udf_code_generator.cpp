@@ -7,6 +7,7 @@
 #include "codegen/type/integer_type.h"
 #include "codegen/type/type.h"
 #include "codegen/value.h"
+#include "codegen/vector.h"
 #include "udf/ast_nodes.h"
 #include "udf/util.h"
 
@@ -32,6 +33,14 @@ void UDFCodeGenerator::Visit(ValueExprAST *ast) {
           codegen_->ConstDouble(ast->value_.GetAs<double>()));
       break;
     }
+    case type::TypeId::VARCHAR: {
+      auto *val = codegen_->ConstStringPtr(ast->value_.ToString());
+      auto *len = codegen_->Const32(ast->value_.GetLength());
+      *dst_ = peloton::codegen::Value(
+          peloton::codegen::type::Type(type::TypeId::VARCHAR, false),
+          val, len);
+      break;
+    }
     default:
       throw Exception("ValueExprAST::Codegen : Expression type not supported");
   }
@@ -40,10 +49,23 @@ void UDFCodeGenerator::Visit(ValueExprAST *ast) {
 void UDFCodeGenerator::Visit(VariableExprAST *ast) {
   llvm::Value *val = fb_->GetArgumentByName(ast->name);
   type::TypeId type = udf_context_->GetVariableType(ast->name);
-  // TODO[Siva]: Support Integers for arguments as well
+
   if (val) {
     *dst_ = codegen::Value(codegen::type::Type(type, false), val);
     return;
+  } else if (type == type::TypeId::VARCHAR) {
+    auto alloc_val = udf_context_->GetAllocValue(ast->name);
+    llvm::Value *val = nullptr, *len = nullptr, *null = nullptr;
+    alloc_val.ValuesForMaterialization(*codegen_, val, len, null);
+
+    codegen::Vector strs{val, 1, codegen_->CharPtrType()};
+    codegen::Vector lens{len, 1, codegen_->Int32Type()};
+    auto *str_val = strs.GetValue(*codegen_, 0);
+    auto *len_val = lens.GetValue(*codegen_, 0);
+
+    *dst_ = peloton::codegen::Value(
+        peloton::codegen::type::Type(type::TypeId::VARCHAR, false),
+        str_val, len_val);
   } else {
     // Assuming each variable is defined
     auto *alloc_val = (udf_context_->GetAllocValue(ast->name)).GetValue();
@@ -245,6 +267,14 @@ void UDFCodeGenerator::Visit(DeclStmtAST *ast) {
       udf_context_->SetAllocValue(ast->name, alloc_val);
       break;
     }
+    case type::TypeId::VARCHAR: {
+      auto alloc_val = peloton::codegen::Value(
+          peloton::codegen::type::Type(type::TypeId::VARCHAR, false),
+          codegen_->AllocateVariable(codegen_->CharPtrType(), ast->name),
+          codegen_->AllocateVariable(codegen_->Int32Type(), ast->name+"__len__"));
+      udf_context_->SetAllocValue(ast->name, alloc_val);
+      break;
+    }
     default: {
       // TODO[Siva]: Should throw an excpetion, but need to figure out "found"
       // and other internal types first.
@@ -346,10 +376,38 @@ void UDFCodeGenerator::Visit(AssignStmtAST *ast) {
   codegen::Value right_codegen_val;
   dst_ = &right_codegen_val;
   ast->rhs->Accept(this);
-  auto *left_val = (ast->lhs->GetAllocValue(udf_context_)).GetValue();
+
+  auto left_codegen_val = ast->lhs->GetAllocValue(udf_context_);
+
+  auto *left_val = left_codegen_val.GetValue();
+
   auto right_type = right_codegen_val.GetType();
-  auto left_type =
-      codegen::type::Type(ast->lhs->GetVarType(udf_context_), false);
+
+  auto left_type_id = ast->lhs->GetVarType(udf_context_);
+
+  auto left_type = codegen::type::Type(left_type_id, false);
+
+  if (left_type_id == type::TypeId::VARCHAR) {
+    llvm::Value *l_val = nullptr, *l_len = nullptr, *l_null = nullptr;
+    left_codegen_val.ValuesForMaterialization(*codegen_, l_val, l_len, l_null);
+
+    
+    llvm::Value *r_val = nullptr, *r_len = nullptr, *r_null = nullptr;
+    right_codegen_val.ValuesForMaterialization(*codegen_, r_val, r_len, r_null);
+
+
+    codegen::Vector strs{l_val, 1, codegen_->CharPtrType()};
+
+    codegen::Vector lens{l_len, 1, codegen_->Int32Type()};
+
+    auto *index = codegen_->Const32(0);
+
+    strs.SetValue(*codegen_, index, r_val);
+
+    lens.SetValue(*codegen_, index, r_len);
+
+    return;
+  }
 
   if (right_type != left_type) {
     // TODO[Siva]: Need to check that they can be casted in semantic analysis

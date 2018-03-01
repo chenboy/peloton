@@ -138,6 +138,9 @@ std::unique_ptr<StmtAST> PLpgSQLParser::ParseDecl(const Json::Value decl) {
     auto name = decl[kPLpgSQL_var][kRefname].asString();
     auto type =
         decl[kPLpgSQL_var][kDatatype][kPLpgSQL_type][kTypname].asString();
+
+    LOG_INFO("Registering type %s: %s", name.c_str(),type.c_str());
+
     if (type == "integer") {
       udf_context_->SetVariableType(var_name, type::TypeId::INTEGER);
       return std::unique_ptr<DeclStmtAST>(

@@ -13,6 +13,9 @@ llvm::Type *UDFUtil::GetCodegenType(type::TypeId type_val,
     case type::TypeId::DECIMAL: {
       return cg.DoubleType();
     }
+    case type::TypeId::VARCHAR: {
+      return cg.CharPtrType();
+    }
     default: { throw Exception("UDFHandler : Expression type not supported"); }
   }
 }
