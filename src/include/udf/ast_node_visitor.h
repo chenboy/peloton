@@ -1,3 +1,15 @@
+//===----------------------------------------------------------------------===//
+//
+//                         Peloton
+//
+// ast_node_visitor.h
+//
+// Identification: src/include/udf/ast_node_visitor.h
+//
+// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
+//
+//===----------------------------------------------------------------------===//
+
 #pragma once
 
 namespace peloton {
@@ -16,10 +28,12 @@ class IfStmtAST;
 class WhileStmtAST;
 class RetStmtAST;
 class AssignStmtAST;
+class SQLStmtAST;
+class DynamicSQLStmtAST;
 
 class ASTNodeVisitor {
  public:
-  virtual ~ASTNodeVisitor() {};
+  virtual ~ASTNodeVisitor(){};
 
   virtual void Visit(AbstractAST *){};
   virtual void Visit(StmtAST *){};
@@ -34,6 +48,8 @@ class ASTNodeVisitor {
   virtual void Visit(WhileStmtAST *){};
   virtual void Visit(RetStmtAST *){};
   virtual void Visit(AssignStmtAST *){};
+  virtual void Visit(SQLStmtAST *){};
+  virtual void Visit(DynamicSQLStmtAST *){};
 };
-} // namespace udf
-} // namespace peloton
+}  // namespace udf
+}  // namespace peloton

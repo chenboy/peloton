@@ -1,3 +1,15 @@
+//===----------------------------------------------------------------------===//
+//
+//                         Peloton
+//
+// udf_codegen.h
+//
+// Identification: src/include/udf/udf_codegen.h
+//
+// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
+//
+//===----------------------------------------------------------------------===//
+
 #pragma once
 #include "udf/ast_node_visitor.h"
 
@@ -21,12 +33,14 @@ class IfStmtAST;
 class WhileStmtAST;
 class RetStmtAST;
 class AssignStmtAST;
+class SQLStmtAST;
+class DynamicSQLStmtAST;
 class UDFContext;
 
-class UDFCodeGenerator : public ASTNodeVisitor {
+class UDFCodegen : public ASTNodeVisitor {
  public:
-  UDFCodeGenerator(codegen::CodeGen *codegen, codegen::FunctionBuilder *fb,
-                   UDFContext *udf_Context);
+  UDFCodegen(codegen::CodeGen *codegen, codegen::FunctionBuilder *fb,
+             UDFContext *udf_Context);
 
   void GenerateUDF(AbstractAST *);
   void Visit(ValueExprAST *) override;
@@ -39,6 +53,8 @@ class UDFCodeGenerator : public ASTNodeVisitor {
   void Visit(WhileStmtAST *) override;
   void Visit(RetStmtAST *) override;
   void Visit(AssignStmtAST *) override;
+  void Visit(SQLStmtAST *) override;
+  void Visit(DynamicSQLStmtAST *) override;
 
  private:
   codegen::CodeGen *codegen_;

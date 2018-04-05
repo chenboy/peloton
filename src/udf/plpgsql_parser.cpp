@@ -1,3 +1,15 @@
+//===----------------------------------------------------------------------===//
+//
+//                         Peloton
+//
+// plpgsql_parser.cpp
+//
+// Identification: src/udf/plpgsql_parser.cpp
+//
+// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
+//
+//===----------------------------------------------------------------------===//
+
 #include <sstream>
 
 #include "udf/plpgsql_parser.h"
@@ -31,6 +43,13 @@ const std::string kQuery = "query";
 const std::string kPLpgSQL_expr = "PLpgSQL_expr";
 const std::string kPLpgSQL_stmt_assign = "PLpgSQL_stmt_assign";
 const std::string kVarno = "varno";
+const std::string kPLpgSQL_stmt_execsql = "PLpgSQL_stmt_execsql";
+const std::string kSqlstmt = "sqlstmt";
+const std::string kRow = "row";
+const std::string kFields = "fields";
+const std::string kName = "name";
+const std::string kPLpgSQL_row = "PLpgSQL_row";
+const std::string kPLpgSQL_stmt_dynexecute = "PLpgSQL_stmt_dynexecute";
 
 std::unique_ptr<FunctionAST> PLpgSQLParser::ParsePLpgSQL(
     std::string func_body) {
@@ -42,8 +61,8 @@ std::unique_ptr<FunctionAST> PLpgSQLParser::ParsePLpgSQL(
                     std::string(result.error->message));
   }
   // The result is a list, we need to wrap it
-  std::string ast_json_str = "{ \"" + kFunctionList + "\" : " +
-                             std::string(result.plpgsql_funcs) + " }";
+  std::string ast_json_str = "{ \"" + kFunctionList +
+                             "\" : " + std::string(result.plpgsql_funcs) + " }";
   LOG_DEBUG("Compiling JSON formatted function %s", ast_json_str.c_str());
   pg_query_free_plpgsql_parse_result(result);
 
@@ -117,6 +136,10 @@ std::unique_ptr<StmtAST> PLpgSQLParser::ParseBlock(const Json::Value block) {
       stmts.push_back(std::move(ass_expr_ast));
     } else if (stmt_names[0] == kPLpgSQL_stmt_while) {
       stmts.push_back(ParseWhile(stmt[kPLpgSQL_stmt_while]));
+    } else if (stmt_names[0] == kPLpgSQL_stmt_execsql) {
+      stmts.push_back(ParseSQL(stmt[kPLpgSQL_stmt_execsql]));
+    } else if (stmt_names[0] == kPLpgSQL_stmt_dynexecute) {
+      stmts.push_back(ParseDynamicSQL(stmt[kPLpgSQL_stmt_dynexecute]));
     } else {
       throw Exception("Statement type not supported : " + stmt_names[0]);
     }
@@ -134,30 +157,36 @@ std::unique_ptr<StmtAST> PLpgSQLParser::ParseDecl(const Json::Value decl) {
   if (decl_names[0] == kPLpgSQL_var) {
     auto var_name = decl[kPLpgSQL_var][kRefname].asString();
     udf_context_->AddVariable(var_name);
-
-    auto name = decl[kPLpgSQL_var][kRefname].asString();
     auto type =
         decl[kPLpgSQL_var][kDatatype][kPLpgSQL_type][kTypname].asString();
 
-    LOG_INFO("Registering type %s: %s", name.c_str(),type.c_str());
+    LOG_INFO("Registering type %s: %s", var_name.c_str(), type.c_str());
 
     if (type == "integer") {
       udf_context_->SetVariableType(var_name, type::TypeId::INTEGER);
       return std::unique_ptr<DeclStmtAST>(
-          new DeclStmtAST(name, type::TypeId::INTEGER));
+          new DeclStmtAST(var_name, type::TypeId::INTEGER));
     } else if (type == "double") {
       udf_context_->SetVariableType(var_name, type::TypeId::DECIMAL);
       return std::unique_ptr<DeclStmtAST>(
-          new DeclStmtAST(name, type::TypeId::DECIMAL));
-    } else if(type == "varchar") {
+          new DeclStmtAST(var_name, type::TypeId::DECIMAL));
+    } else if (type == "varchar") {
       udf_context_->SetVariableType(var_name, type::TypeId::VARCHAR);
       return std::unique_ptr<DeclStmtAST>(
-          new DeclStmtAST(name, type::TypeId::VARCHAR));
+          new DeclStmtAST(var_name, type::TypeId::VARCHAR));
     } else {
       udf_context_->SetVariableType(var_name, type::TypeId::INVALID);
       return std::unique_ptr<DeclStmtAST>(
-          new DeclStmtAST(name, type::TypeId::INVALID));
+          new DeclStmtAST(var_name, type::TypeId::INVALID));
     }
+  } else if (decl_names[0] == kPLpgSQL_row) {
+    auto var_name = decl[kPLpgSQL_var][kRefname].asString();
+    PL_ASSERT(var_name == "*internal*");
+    // TODO[Siva]: Support row types later
+    udf_context_->SetVariableType(var_name, type::TypeId::INVALID);
+    return std::unique_ptr<DeclStmtAST>(
+        new DeclStmtAST(var_name, type::TypeId::INVALID));
+
   } else {
     // TODO[Siva]: need to handle other types like row, table etc;
     throw Exception("Declaration type not supported : " + decl_names[0]);
@@ -180,6 +209,24 @@ std::unique_ptr<StmtAST> PLpgSQLParser::ParseWhile(const Json::Value loop) {
   auto body_stmt = ParseBlock(loop[kBody]);
   return std::unique_ptr<WhileStmtAST>(
       new WhileStmtAST(std::move(cond_expr), std::move(body_stmt)));
+}
+
+std::unique_ptr<StmtAST> PLpgSQLParser::ParseSQL(const Json::Value sql_stmt) {
+  LOG_DEBUG("ParseSQL");
+  auto sql_query = sql_stmt[kSqlstmt][kPLpgSQL_expr][kQuery].asString();
+  auto var_name = sql_stmt[kRow][kPLpgSQL_row][kFields][0][kName].asString();
+  return std::unique_ptr<SQLStmtAST>(
+      new SQLStmtAST(std::move(sql_query), std::move(var_name)));
+}
+
+std::unique_ptr<StmtAST> PLpgSQLParser::ParseDynamicSQL(
+    const Json::Value sql_stmt) {
+  LOG_DEBUG("ParseDynamicSQL");
+  auto sql_expr =
+      ParseExprSQL(sql_stmt[kQuery][kPLpgSQL_expr][kQuery].asString());
+  auto var_name = sql_stmt[kRow][kPLpgSQL_row][kFields][0][kName].asString();
+  return std::unique_ptr<DynamicSQLStmtAST>(
+      new DynamicSQLStmtAST(std::move(sql_expr), std::move(var_name)));
 }
 
 std::unique_ptr<ExprAST> PLpgSQLParser::ParseExprSQL(

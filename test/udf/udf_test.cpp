@@ -384,5 +384,86 @@ TEST_F(UDFTest, LoopTest) {
   txn_manager.CommitTransaction(txn);
 }
 
+TEST_F(UDFTest, SQLTest) {
+  auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
+  auto txn = txn_manager.BeginTransaction();
+  catalog::Catalog::GetInstance()->CreateDatabase(DEFAULT_DB_NAME, txn);
+  catalog::Catalog::GetInstance()->Bootstrap();
+  txn_manager.CommitTransaction(txn);
+  // Create a txn
+  txn = txn_manager.BeginTransaction();
+
+  TestingSQLUtil::ExecuteSQLQuery(
+      " CREATE OR REPLACE FUNCTION static(i double) RETURNS double AS $$ "
+      " DECLARE "
+      "   d1 double; "
+      "   d2 double; "
+      " BEGIN "
+      " SELECT sum(income) from foo into d1; "
+      " SELECT sum(income) from foo into d2; "
+      " RETURN i * (d1 + d2);"
+      " END; $$ "
+      " LANGUAGE plpgsql;");
+
+  TestingSQLUtil::ExecuteSQLQuery(
+      " CREATE OR REPLACE FUNCTION dynamic(i double) RETURNS double AS $$ "
+      " DECLARE "
+      "   d1 double; "
+      "   d2 double; "
+      "   s varchar; "
+      " BEGIN "
+      " s := 'SELECT sum(income) from foo;'; "
+      " EXECUTE s into d1; "
+      " EXECUTE 'SELECT sum(income) from foo' into d2; "
+      " RETURN i * (d1 + d2);"
+      " END; $$ "
+      " LANGUAGE plpgsql;");
+
+  TestingSQLUtil::ExecuteSQLQuery("CREATE TABLE foo(income double);");
+
+  TestingSQLUtil::ExecuteSQLQuery("INSERT into foo values (2.0);");
+
+  TestingSQLUtil::ExecuteSQLQuery("INSERT into foo values (3.0);");
+
+  txn_manager.CommitTransaction(txn);
+  // Fetch values from the table
+  std::vector<ResultValue> result;
+  std::vector<FieldInfo> tuple_descriptor;
+  std::string error_message;
+  int rows_affected;
+  std::string testQuery = "select static(income) from foo;";
+
+  TestingSQLUtil::ExecuteSQLQuery(testQuery.c_str(), result, tuple_descriptor,
+                                  rows_affected, error_message);
+  std::vector<double> outputs;
+  outputs.push_back(20.0);
+  outputs.push_back(30.0);
+  int i;
+
+  for (i = 0; i < 2; i++) {
+    std::string result_income(
+        TestingSQLUtil::GetResultValueAsString(result, (i)));
+    double income = std::stod(result_income);
+    EXPECT_DOUBLE_EQ(income, (outputs[i]));
+  }
+
+  testQuery = "select dynamic(income) from foo;";
+
+  TestingSQLUtil::ExecuteSQLQuery(testQuery.c_str(), result, tuple_descriptor,
+                                  rows_affected, error_message);
+
+  for (i = 0; i < 2; i++) {
+    std::string result_income(
+        TestingSQLUtil::GetResultValueAsString(result, (i)));
+    double income = std::stod(result_income);
+    EXPECT_DOUBLE_EQ(income, (outputs[i]));
+  }
+
+  // free the database just created
+  txn = txn_manager.BeginTransaction();
+  catalog::Catalog::GetInstance()->DropDatabaseWithName(DEFAULT_DB_NAME, txn);
+  txn_manager.CommitTransaction(txn);
+}
+
 }  // namespace test
 }  // namespace peloton

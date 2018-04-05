@@ -1,26 +1,47 @@
-#include "udf/udf_code_generator.h"
+//===----------------------------------------------------------------------===//
+//
+//                         Peloton
+//
+// udf_codegen.cpp
+//
+// Identification: src/udf/udf_codegen.cpp
+//
+// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
+//
+//===----------------------------------------------------------------------===//
+
+#include "udf/udf_codegen.h"
 
 #include "catalog/catalog.h"
+#include "codegen/buffering_consumer.h"
 #include "codegen/lang/if.h"
 #include "codegen/lang/loop.h"
+#include "codegen/proxy/udf_util_proxy.h"
+#include "codegen/query.h"
+#include "codegen/query_cache.h"
+#include "codegen/query_compiler.h"
 #include "codegen/type/decimal_type.h"
 #include "codegen/type/integer_type.h"
 #include "codegen/type/type.h"
 #include "codegen/value.h"
-#include "codegen/vector.h"
+#include "concurrency/transaction_manager_factory.h"
+#include "executor/executor_context.h"
+#include "executor/executors.h"
+#include "optimizer/optimizer.h"
+#include "parser/postgresparser.h"
+#include "traffic_cop/traffic_cop.h"
 #include "udf/ast_nodes.h"
-#include "udf/util.h"
+#include "udf/udf_util.h"
 
 namespace peloton {
 namespace udf {
-UDFCodeGenerator::UDFCodeGenerator(codegen::CodeGen *codegen,
-                                   codegen::FunctionBuilder *fb,
-                                   UDFContext *udf_context)
+UDFCodegen::UDFCodegen(codegen::CodeGen *codegen, codegen::FunctionBuilder *fb,
+                       UDFContext *udf_context)
     : codegen_(codegen), fb_(fb), udf_context_(udf_context), dst_(nullptr){};
 
-void UDFCodeGenerator::GenerateUDF(AbstractAST *ast) { ast->Accept(this); }
+void UDFCodegen::GenerateUDF(AbstractAST *ast) { ast->Accept(this); }
 
-void UDFCodeGenerator::Visit(ValueExprAST *ast) {
+void UDFCodegen::Visit(ValueExprAST *ast) {
   switch (ast->value_.GetTypeId()) {
     case type::TypeId::INTEGER: {
       *dst_ = codegen::Value(codegen::type::Type(type::TypeId::INTEGER, false),
@@ -37,8 +58,7 @@ void UDFCodeGenerator::Visit(ValueExprAST *ast) {
       auto *val = codegen_->ConstStringPtr(ast->value_.ToString());
       auto *len = codegen_->Const32(ast->value_.GetLength());
       *dst_ = peloton::codegen::Value(
-          peloton::codegen::type::Type(type::TypeId::VARCHAR, false),
-          val, len);
+          peloton::codegen::type::Type(type::TypeId::VARCHAR, false), val, len);
       break;
     }
     default:
@@ -46,7 +66,7 @@ void UDFCodeGenerator::Visit(ValueExprAST *ast) {
   }
 }
 
-void UDFCodeGenerator::Visit(VariableExprAST *ast) {
+void UDFCodegen::Visit(VariableExprAST *ast) {
   llvm::Value *val = fb_->GetArgumentByName(ast->name);
   type::TypeId type = udf_context_->GetVariableType(ast->name);
 
@@ -58,23 +78,25 @@ void UDFCodeGenerator::Visit(VariableExprAST *ast) {
     llvm::Value *val = nullptr, *len = nullptr, *null = nullptr;
     alloc_val.ValuesForMaterialization(*codegen_, val, len, null);
 
-    codegen::Vector strs{val, 1, codegen_->CharPtrType()};
-    codegen::Vector lens{len, 1, codegen_->Int32Type()};
-    auto *str_val = strs.GetValue(*codegen_, 0);
-    auto *len_val = lens.GetValue(*codegen_, 0);
+    auto *index = codegen_->Const32(0);
+    auto *str_val = (*codegen_)->CreateLoad(
+        (*codegen_)->CreateInBoundsGEP(codegen_->CharPtrType(), val, index));
+    auto *len_val = (*codegen_)->CreateLoad(
+        (*codegen_)->CreateInBoundsGEP(codegen_->Int32Type(), len, index));
 
     *dst_ = peloton::codegen::Value(
-        peloton::codegen::type::Type(type::TypeId::VARCHAR, false),
-        str_val, len_val);
+        peloton::codegen::type::Type(type::TypeId::VARCHAR, false), str_val,
+        len_val);
   } else {
     // Assuming each variable is defined
     auto *alloc_val = (udf_context_->GetAllocValue(ast->name)).GetValue();
-    *dst_ = codegen::Value(
-        codegen::type::Type(type, false), (*codegen_)->CreateLoad(alloc_val));
+    *dst_ = codegen::Value(codegen::type::Type(type, false),
+                           (*codegen_)->CreateLoad(alloc_val));
     return;
   }
 }
-void UDFCodeGenerator::Visit(BinaryExprAST *ast) {
+
+void UDFCodegen::Visit(BinaryExprAST *ast) {
   auto *ret_dst = dst_;
   codegen::Value left;
   dst_ = &left;
@@ -128,7 +150,7 @@ void UDFCodeGenerator::Visit(BinaryExprAST *ast) {
   }
 }
 
-void UDFCodeGenerator::Visit(CallExprAST *ast) {
+void UDFCodegen::Visit(CallExprAST *ast) {
   std::vector<llvm::Value *> args_val;
   std::vector<type::TypeId> args_type;
   auto *ret_dst = dst_;
@@ -238,7 +260,7 @@ void UDFCodeGenerator::Visit(CallExprAST *ast) {
   }
 }
 
-void UDFCodeGenerator::Visit(SeqStmtAST *ast) {
+void UDFCodegen::Visit(SeqStmtAST *ast) {
   for (uint32_t i = 0; i < ast->stmts.size(); i++) {
     // If already return in the current block, don't continue to generate
     if (codegen_->IsTerminated()) {
@@ -248,8 +270,9 @@ void UDFCodeGenerator::Visit(SeqStmtAST *ast) {
   }
 }
 
-void UDFCodeGenerator::Visit(DeclStmtAST *ast) {
+void UDFCodegen::Visit(DeclStmtAST *ast) {
   switch (ast->type) {
+    // TODO[Siva]: This is a hack, this is a pointer to type, not type
     // TODO[Siva]: Replace with this a function that returns llvm::Type from
     // type::TypeID
     case type::TypeId::INTEGER: {
@@ -270,8 +293,10 @@ void UDFCodeGenerator::Visit(DeclStmtAST *ast) {
     case type::TypeId::VARCHAR: {
       auto alloc_val = peloton::codegen::Value(
           peloton::codegen::type::Type(type::TypeId::VARCHAR, false),
-          codegen_->AllocateVariable(codegen_->CharPtrType(), ast->name),
-          codegen_->AllocateVariable(codegen_->Int32Type(), ast->name+"__len__"));
+          codegen_->AllocateVariable(codegen_->CharPtrType(),
+                                     ast->name + "_ptr"),
+          codegen_->AllocateVariable(codegen_->Int32Type(),
+                                     ast->name + "_len"));
       udf_context_->SetAllocValue(ast->name, alloc_val);
       break;
     }
@@ -282,7 +307,7 @@ void UDFCodeGenerator::Visit(DeclStmtAST *ast) {
   }
 }
 
-void UDFCodeGenerator::Visit(IfStmtAST *ast) {
+void UDFCodegen::Visit(IfStmtAST *ast) {
   auto compare_value = peloton::codegen::Value(
       peloton::codegen::type::Type(type::TypeId::DECIMAL, false),
       codegen_->ConstDouble(1.0));
@@ -309,7 +334,7 @@ void UDFCodeGenerator::Visit(IfStmtAST *ast) {
   return;
 }
 
-void UDFCodeGenerator::Visit(WhileStmtAST *ast) {
+void UDFCodegen::Visit(WhileStmtAST *ast) {
   // TODO(boweic): Use boolean when supported
   auto compare_value =
       codegen::Value(codegen::type::Type(type::TypeId::DECIMAL, false),
@@ -343,7 +368,7 @@ void UDFCodeGenerator::Visit(WhileStmtAST *ast) {
   return;
 }
 
-void UDFCodeGenerator::Visit(RetStmtAST *ast) {
+void UDFCodegen::Visit(RetStmtAST *ast) {
   // TODO[Siva]: Handle void properly
   if (ast->expr == nullptr) {
     // TODO(boweic): We should deduce type in typechecking phase and create a
@@ -368,11 +393,27 @@ void UDFCodeGenerator::Visit(RetStmtAST *ast) {
           codegen::type::Type(udf_context_->GetFunctionReturnType(), false));
     }
 
+    // if(expr_ret_val.GetType() ==
+    //       peloton::codegen::type::Type(type::TypeId::VARCHAR, false)) {
+
+    //   llvm::StructType *structType =
+    //       llvm::StructType::create(context, "RaviGCObject");
+    //   llvm::PointerType *pstructType =
+    //     llvm::PointerType::get(structType, 0); // pointer to RaviGCObjec
+    //   std::vector<llvm::Type *> elements;
+    //   elements.push_back(pstructType);
+    //   elements.push_back(llvm::Type::getInt8Ty(context));
+    //   elements.push_back(llvm::Type::getInt8Ty(context));
+    //   structType->setBody(elements);
+    //   structType->dump();
+
+    // }
+
     (*codegen_)->CreateRet(expr_ret_val.GetValue());
   }
 }
 
-void UDFCodeGenerator::Visit(AssignStmtAST *ast) {
+void UDFCodegen::Visit(AssignStmtAST *ast) {
   codegen::Value right_codegen_val;
   dst_ = &right_codegen_val;
   ast->rhs->Accept(this);
@@ -391,20 +432,11 @@ void UDFCodeGenerator::Visit(AssignStmtAST *ast) {
     llvm::Value *l_val = nullptr, *l_len = nullptr, *l_null = nullptr;
     left_codegen_val.ValuesForMaterialization(*codegen_, l_val, l_len, l_null);
 
-    
     llvm::Value *r_val = nullptr, *r_len = nullptr, *r_null = nullptr;
     right_codegen_val.ValuesForMaterialization(*codegen_, r_val, r_len, r_null);
 
-
-    codegen::Vector strs{l_val, 1, codegen_->CharPtrType()};
-
-    codegen::Vector lens{l_len, 1, codegen_->Int32Type()};
-
-    auto *index = codegen_->Const32(0);
-
-    strs.SetValue(*codegen_, index, r_val);
-
-    lens.SetValue(*codegen_, index, r_len);
+    (*codegen_)->CreateStore(r_val, l_val);
+    (*codegen_)->CreateStore(r_len, l_len);
 
     return;
   }
@@ -417,6 +449,25 @@ void UDFCodeGenerator::Visit(AssignStmtAST *ast) {
   }
 
   (*codegen_)->CreateStore(right_codegen_val.GetValue(), left_val);
+}
+
+void UDFCodegen::Visit(SQLStmtAST *ast) {
+  auto *val = codegen_->ConstStringPtr(ast->query);
+  auto *len = codegen_->Const32(ast->query.size());
+  auto left = udf_context_->GetAllocValue(ast->var_name);
+  codegen_->Call(codegen::UDFUtilProxy::ExecuteSQLHelper,
+                 {val, len, left.GetValue()});
+  return;
+}
+
+void UDFCodegen::Visit(DynamicSQLStmtAST *ast) {
+  codegen::Value query;
+  dst_ = &query;
+  ast->query->Accept(this);
+  auto left = udf_context_->GetAllocValue(ast->var_name);
+  codegen_->Call(codegen::UDFUtilProxy::ExecuteSQLHelper,
+                 {query.GetValue(), query.GetLength(), left.GetValue()});
+  return;
 }
 
 }  // namespace udf

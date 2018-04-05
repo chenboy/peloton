@@ -1,3 +1,15 @@
+//===----------------------------------------------------------------------===//
+//
+//                         Peloton
+//
+// ast_nodes.h
+//
+// Identification: src/include/udf/ast_nodes.h
+//
+// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
+//
+//===----------------------------------------------------------------------===//
+
 #pragma once
 
 #include "codegen/code_context.h"
@@ -23,59 +35,44 @@ namespace udf {
 class AbstractAST {
  public:
   virtual ~AbstractAST() = default;
-  virtual void Accept(ASTNodeVisitor *visitor) { visitor->Visit(this); };
 
-  // virtual void Codegen(codegen::CodeGen &codegen, codegen::FunctionBuilder &fb,
-                       // codegen::Value *dst, UDFContext *udf_context) = 0;
+  virtual void Accept(ASTNodeVisitor *visitor) { visitor->Visit(this); };
 };
 
 // StmtAST - Base class for all statement nodes.
 class StmtAST : public AbstractAST {
  public:
   virtual ~StmtAST() = default;
-  void Accept(ASTNodeVisitor *visitor) override { visitor->Visit(this); };
 
-  // virtual void Codegen(peloton::codegen::CodeGen &codegen,
-                       // peloton::codegen::FunctionBuilder &fb,
-                       // codegen::Value *dst,
-                       // UDFContext *udf_context) override = 0;
+  void Accept(ASTNodeVisitor *visitor) override { visitor->Visit(this); };
 };
 
 // ExprAST - Base class for all expression nodes.
 class ExprAST : public StmtAST {
  public:
   virtual ~ExprAST() = default;
-  void Accept(ASTNodeVisitor *visitor) override { visitor->Visit(this); };
 
-  // virtual void Codegen(peloton::codegen::CodeGen &codegen,
-                       // peloton::codegen::FunctionBuilder &fb,
-                       // codegen::Value *dst, UDFContext *udf_context) override = 0;
+  void Accept(ASTNodeVisitor *visitor) override { visitor->Visit(this); };
 };
 
 // DoubleExprAST - Expression class for numeric literals like "1.1".
 class ValueExprAST : public ExprAST {
  public:
   type::Value value_;
+
   ValueExprAST(type::Value value) : value_(value) {}
 
   void Accept(ASTNodeVisitor *visitor) override { visitor->Visit(this); };
-
-  // void Codegen(peloton::codegen::CodeGen &codegen,
-               // peloton::codegen::FunctionBuilder &fb, codegen::Value *dst,
-               // UDFContext *udf_context) override;
 };
 
 // VariableExprAST - Expression class for referencing a variable, like "a".
 class VariableExprAST : public ExprAST {
  public:
   std::string name;
+
   VariableExprAST(const std::string &name) : name(name) {}
 
   void Accept(ASTNodeVisitor *visitor) override { visitor->Visit(this); };
-
-  // void Codegen(peloton::codegen::CodeGen &codegen,
-               // peloton::codegen::FunctionBuilder &fb, codegen::Value *dst,
-               // UDFContext *udf_context) override;
 
   peloton::codegen::Value GetAllocValue(UDFContext *udf_context) {
     return udf_context->GetAllocValue(name);
@@ -97,10 +94,6 @@ class BinaryExprAST : public ExprAST {
       : op(op), lhs(std::move(lhs)), rhs(std::move(rhs)) {}
 
   void Accept(ASTNodeVisitor *visitor) override { visitor->Visit(this); };
-
-  // void Codegen(peloton::codegen::CodeGen &codegen,
-               // peloton::codegen::FunctionBuilder &fb, codegen::Value *dst,
-               // UDFContext *udf_context) override;
 };
 
 // CallExprAST - Expression class for function calls.
@@ -114,10 +107,6 @@ class CallExprAST : public ExprAST {
       : callee(callee), args(std::move(args)) {}
 
   void Accept(ASTNodeVisitor *visitor) override { visitor->Visit(this); };
-
-  // void Codegen(peloton::codegen::CodeGen &codegen,
-               // peloton::codegen::FunctionBuilder &fb, codegen::Value *dst,
-               // UDFContext *udf_context) override;
 };
 
 // SeqStmtAST - Statement class for sequence of statements
@@ -129,10 +118,6 @@ class SeqStmtAST : public StmtAST {
       : stmts(std::move(stmts)) {}
 
   void Accept(ASTNodeVisitor *visitor) override { visitor->Visit(this); };
-
-  // void Codegen(peloton::codegen::CodeGen &codegen,
-               // peloton::codegen::FunctionBuilder &fb, codegen::Value *dst,
-               // UDFContext *udf_context) override;
 };
 
 // DeclStmtAST - Statement class for sequence of statements
@@ -145,10 +130,6 @@ class DeclStmtAST : public StmtAST {
       : name(std::move(name)), type(std::move(type)) {}
 
   void Accept(ASTNodeVisitor *visitor) override { visitor->Visit(this); };
-
-  // void Codegen(peloton::codegen::CodeGen &codegen,
-               // peloton::codegen::FunctionBuilder &fb, codegen::Value *dst,
-               // UDFContext *udf_context) override;
 };
 
 // IfStmtAST - Statement class for if/then/else.
@@ -165,10 +146,6 @@ class IfStmtAST : public ExprAST {
       : cond_expr(std::move(cond_expr)),
         then_stmt(std::move(then_stmt)),
         else_stmt(std::move(else_stmt)) {}
-
-  // void Codegen(peloton::codegen::CodeGen &codegen,
-               // peloton::codegen::FunctionBuilder &fb, codegen::Value *dst,
-               // UDFContext *udf_context) override;
 };
 
 // WhileAST - Statement class for while loop
@@ -182,10 +159,6 @@ class WhileStmtAST : public ExprAST {
   WhileStmtAST(std::unique_ptr<ExprAST> cond_expr,
                std::unique_ptr<StmtAST> body_stmt)
       : cond_expr(std::move(cond_expr)), body_stmt(std::move(body_stmt)) {}
-
-  // void Codegen(peloton::codegen::CodeGen &codegen,
-               // peloton::codegen::FunctionBuilder &fb, codegen::Value *dst,
-               // UDFContext *udf_context) override;
 };
 
 // RetStmtAST - Statement class for sequence of statements
@@ -196,10 +169,6 @@ class RetStmtAST : public StmtAST {
   RetStmtAST(std::unique_ptr<ExprAST> expr) : expr(std::move(expr)) {}
 
   void Accept(ASTNodeVisitor *visitor) override { visitor->Visit(this); };
-
-  // void Codegen(peloton::codegen::CodeGen &codegen,
-               // peloton::codegen::FunctionBuilder &fb, codegen::Value *dst,
-               // UDFContext *udf_context) override;
 };
 
 // AssignStmtAST - Expression class for a binary operator.
@@ -213,10 +182,30 @@ class AssignStmtAST : public ExprAST {
       : lhs(std::move(lhs)), rhs(std::move(rhs)) {}
 
   void Accept(ASTNodeVisitor *visitor) override { visitor->Visit(this); };
+};
 
-  // void Codegen(peloton::codegen::CodeGen &codegen,
-               // peloton::codegen::FunctionBuilder &fb, codegen::Value *dst,
-               // UDFContext *udf_context) override;
+// SQLStmtAST - Expression class for a SQL Statement.
+class SQLStmtAST : public StmtAST {
+ public:
+  std::string query;
+  std::string var_name;
+
+  SQLStmtAST(std::string query, std::string var_name)
+      : query(std::move(query)), var_name(std::move(var_name)) {}
+
+  void Accept(ASTNodeVisitor *visitor) override { visitor->Visit(this); };
+};
+
+// DynamicSQLStmtAST - Expression class for a SQL Statement.
+class DynamicSQLStmtAST : public StmtAST {
+ public:
+  std::unique_ptr<ExprAST> query;
+  std::string var_name;
+
+  DynamicSQLStmtAST(std::unique_ptr<ExprAST> query, std::string var_name)
+      : query(std::move(query)), var_name(std::move(var_name)) {}
+
+  void Accept(ASTNodeVisitor *visitor) override { visitor->Visit(this); };
 };
 
 // FunctionAST - This class represents a function definition itself.
