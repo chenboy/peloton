@@ -12,6 +12,7 @@
 
 #include "codegen/expression/function_translator.h"
 
+#include "codegen/proxy/string_functions_proxy.h"
 #include "codegen/type/decimal_type.h"
 #include "codegen/type/integer_type.h"
 #include "codegen/type/sql_type.h"
@@ -96,7 +97,46 @@ codegen::Value FunctionTranslator::DeriveValue(CodeGen &codegen,
     // It's a UDF
     std::vector<llvm::Value *> raw_args;
     for (uint32_t i = 0; i < args.size(); i++) {
-      raw_args.push_back(args[i].GetValue());
+      if(args[i].GetType().type_id == peloton::type::TypeId::VARCHAR) {
+        // create a StrWithLenProxy struct
+        // TODO[Siva]: Is this the right way to do it?
+        LOG_INFO("HERE 0");
+        auto code_context = std::make_shared<codegen::CodeContext>();
+        LOG_INFO("HERE 1");
+        codegen::CodeGen cg{*code_context};
+        LOG_INFO("HERE 2");
+        auto *str_with_len_type = peloton::codegen::StrWithLenProxy::GetType(
+                                      cg);
+        LOG_INFO("HERE 3");
+        llvm::Value *agg_val = cg.AllocateVariable(str_with_len_type,
+                                      "argi");
+
+        LOG_INFO("HERE 4");
+        std::vector<llvm::Value*> indices(2);
+        indices[0] = cg.Const32(0);
+        indices[1] = cg.Const32(0);
+
+        LOG_INFO("HERE 5");
+        auto *str_ptr = cg->CreateGEP(str_with_len_type, agg_val, indices,
+                                      "arg_str_ptr");
+
+        indices[1] = cg.Const32(1);
+        LOG_INFO("HERE 6");
+        auto *str_len = cg->CreateGEP(str_with_len_type, agg_val, indices,
+                                      "arg_str_len");
+
+        LOG_INFO("HERE 7");
+        cg->CreateStore(args[i].GetValue(), str_ptr);
+        LOG_INFO("HERE 8");
+        cg->CreateStore(args[i].GetLength(), str_len);
+        LOG_INFO("HERE 9");
+        agg_val = cg->CreateLoad(agg_val);
+        LOG_INFO("HERE 10");
+        raw_args.push_back(agg_val);
+        LOG_INFO("HERE 11");
+      } else {
+        raw_args.push_back(args[i].GetValue());
+      }
     }
 
     std::unique_ptr<peloton::udf::UDFHandler> udf_handler(

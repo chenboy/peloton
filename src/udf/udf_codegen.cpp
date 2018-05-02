@@ -17,6 +17,7 @@
 #include "codegen/lang/if.h"
 #include "codegen/lang/loop.h"
 #include "codegen/proxy/udf_util_proxy.h"
+#include "codegen/proxy/string_functions_proxy.h"
 #include "codegen/query.h"
 #include "codegen/query_cache.h"
 #include "codegen/query_compiler.h"
@@ -70,29 +71,52 @@ void UDFCodegen::Visit(VariableExprAST *ast) {
   llvm::Value *val = fb_->GetArgumentByName(ast->name);
   type::TypeId type = udf_context_->GetVariableType(ast->name);
 
-  if (val) {
-    *dst_ = codegen::Value(codegen::type::Type(type, false), val);
-    return;
-  } else if (type == type::TypeId::VARCHAR) {
-    auto alloc_val = udf_context_->GetAllocValue(ast->name);
-    llvm::Value *val = nullptr, *len = nullptr, *null = nullptr;
-    alloc_val.ValuesForMaterialization(*codegen_, val, len, null);
+  if (val != nullptr) {
+    if (type == type::TypeId::VARCHAR) {
+      // read in from the StrwithLen
+      auto *str_with_len_type = peloton::codegen::StrWithLenProxy::GetType(
+                                    *codegen_);
 
-    auto *index = codegen_->Const32(0);
-    auto *str_val = (*codegen_)->CreateLoad(
-        (*codegen_)->CreateInBoundsGEP(codegen_->CharPtrType(), val, index));
-    auto *len_val = (*codegen_)->CreateLoad(
-        (*codegen_)->CreateInBoundsGEP(codegen_->Int32Type(), len, index));
+      std::vector<llvm::Value*> indices(2);
+      indices[0] = codegen_->Const32(0);
+      indices[1] = codegen_->Const32(0);
 
-    *dst_ = peloton::codegen::Value(
-        peloton::codegen::type::Type(type::TypeId::VARCHAR, false), str_val,
-        len_val);
+      auto *str_val = (*codegen_)->CreateLoad((*codegen_)->CreateGEP(
+          str_with_len_type, val, indices, "str_ptr"));
+
+      indices[1] = codegen_->Const32(1);
+      auto *len_val = (*codegen_)->CreateLoad((*codegen_)->CreateGEP(
+          str_with_len_type, val,indices, "str_len"));
+
+      *dst_ = peloton::codegen::Value(
+          peloton::codegen::type::Type(type::TypeId::VARCHAR, false), str_val,
+          len_val);
+    } else {
+      *dst_ = codegen::Value(codegen::type::Type(type, false), val);
+      return;
+    }
   } else {
-    // Assuming each variable is defined
-    auto *alloc_val = (udf_context_->GetAllocValue(ast->name)).GetValue();
-    *dst_ = codegen::Value(codegen::type::Type(type, false),
-                           (*codegen_)->CreateLoad(alloc_val));
-    return;
+    if (type == type::TypeId::VARCHAR) {
+      auto alloc_val = udf_context_->GetAllocValue(ast->name);
+      llvm::Value *val = nullptr, *len = nullptr, *null = nullptr;
+      alloc_val.ValuesForMaterialization(*codegen_, val, len, null);
+
+      auto *index = codegen_->Const32(0);
+      auto *str_val = (*codegen_)->CreateLoad(
+          (*codegen_)->CreateInBoundsGEP(codegen_->CharPtrType(), val, index));
+      auto *len_val = (*codegen_)->CreateLoad(
+          (*codegen_)->CreateInBoundsGEP(codegen_->Int32Type(), len, index));
+
+      *dst_ = peloton::codegen::Value(
+          peloton::codegen::type::Type(type::TypeId::VARCHAR, false), str_val,
+          len_val);
+    } else {
+      // Assuming each variable is defined
+      auto *alloc_val = (udf_context_->GetAllocValue(ast->name)).GetValue();
+      *dst_ = codegen::Value(codegen::type::Type(type, false),
+                             (*codegen_)->CreateLoad(alloc_val));
+      return;
+    }
   }
 }
 
@@ -390,26 +414,34 @@ void UDFCodegen::Visit(RetStmtAST *ast) {
                                      false)) {
       expr_ret_val = expr_ret_val.CastTo(
           *codegen_,
-          codegen::type::Type(udf_context_->GetFunctionReturnType(), false));
+          peloton::codegen::type::Type(udf_context_->GetFunctionReturnType(), false));
     }
 
-    // if(expr_ret_val.GetType() ==
-    //       peloton::codegen::type::Type(type::TypeId::VARCHAR, false)) {
+    if(expr_ret_val.GetType() ==
+          peloton::codegen::type::Type(type::TypeId::VARCHAR, false)) {
+      auto *str_with_len_type = peloton::codegen::StrWithLenProxy::GetType(
+                                    *codegen_);
+      llvm::Value *agg_val = codegen_->AllocateVariable(str_with_len_type,
+                                    "return_val");
 
-    //   llvm::StructType *structType =
-    //       llvm::StructType::create(context, "RaviGCObject");
-    //   llvm::PointerType *pstructType =
-    //     llvm::PointerType::get(structType, 0); // pointer to RaviGCObjec
-    //   std::vector<llvm::Type *> elements;
-    //   elements.push_back(pstructType);
-    //   elements.push_back(llvm::Type::getInt8Ty(context));
-    //   elements.push_back(llvm::Type::getInt8Ty(context));
-    //   structType->setBody(elements);
-    //   structType->dump();
+      std::vector<llvm::Value*> indices(2);
+      indices[0] = codegen_->Const32(0);
+      indices[1] = codegen_->Const32(0);
 
-    // }
+      auto *str_ptr = (*codegen_)->CreateGEP(str_with_len_type, agg_val,
+                                             indices, "str_ptr");
 
-    (*codegen_)->CreateRet(expr_ret_val.GetValue());
+      indices[1] = codegen_->Const32(1);
+      auto *str_len = (*codegen_)->CreateGEP(str_with_len_type, agg_val,
+                                             indices, "str_len");
+
+      (*codegen_)->CreateStore(expr_ret_val.GetValue(), str_ptr);
+      (*codegen_)->CreateStore(expr_ret_val.GetLength(), str_len);
+      agg_val = (*codegen_)->CreateLoad(agg_val);
+      (*codegen_)->CreateRet(agg_val);
+    } else {
+      (*codegen_)->CreateRet(expr_ret_val.GetValue());
+    }
   }
 }
 
@@ -455,6 +487,18 @@ void UDFCodegen::Visit(SQLStmtAST *ast) {
   auto *val = codegen_->ConstStringPtr(ast->query);
   auto *len = codegen_->Const32(ast->query.size());
   auto left = udf_context_->GetAllocValue(ast->var_name);
+
+  // auto &code_context = codegen_->GetCodeContext();
+
+  // codegen::FunctionBuilder temp_fun{
+  //     code_context, "temp_fun_1", codegen_->DoubleType(), {}};
+  // {
+  //   temp_fun.ReturnAndFinish(codegen_->ConstDouble(12.0));
+  // }
+
+  // auto *right_val = codegen_->CallFunc(temp_fun.GetFunction(), {});
+  // (*codegen_)->CreateStore(right_val, left.GetValue());
+
   codegen_->Call(codegen::UDFUtilProxy::ExecuteSQLHelper,
                  {val, len, left.GetValue()});
   return;

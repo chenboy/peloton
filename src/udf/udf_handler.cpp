@@ -98,15 +98,14 @@ std::shared_ptr<codegen::CodeContext> UDFHandler::Compile(
                               llvm_args};
 
   // Construct UDF Parser Object
-  // std::unique_ptr<UDFParser> parser(new UDFParser(txn));
-
-  // Parse UDF and generate the AST
-  // parser->ParseUDF(cg, fb, func_body, func_name, args_type);
   PLpgSQLParser parser(&udf_context);
   LOG_DEBUG("func_body : %s", func_body.c_str());
+
+  // Parse UDF and generate the AST
   auto func = parser.ParsePLpgSQL(func_body);
   LOG_INFO("Parsing successful");
   PL_ASSERT(func != nullptr);
+
   if (auto *func_ptr = func->Codegen(cg, fb, &udf_context)) {
     // Required for referencing from Peloton code
     code_context->SetUDF(func_ptr);

@@ -12,6 +12,7 @@
 
 #include "udf/udf_util.h"
 #include "codegen/buffering_consumer.h"
+#include "codegen/proxy/string_functions_proxy.h"
 #include "codegen/query.h"
 #include "codegen/query_cache.h"
 #include "codegen/query_compiler.h"
@@ -31,7 +32,7 @@ namespace udf {
 
 llvm::Type *UDFUtil::GetCodegenType(type::TypeId type_val,
                                     peloton::codegen::CodeGen &cg) {
-  // TODO[Siva]: Add more types later
+  // TODO[Siva]: Add more types later and rename to llvm type
   switch (type_val) {
     case type::TypeId::INTEGER: {
       return cg.Int32Type();
@@ -40,7 +41,7 @@ llvm::Type *UDFUtil::GetCodegenType(type::TypeId type_val,
       return cg.DoubleType();
     }
     case type::TypeId::VARCHAR: {
-      return cg.CharPtrType();
+      return peloton::codegen::StrWithLenProxy::GetType(cg);
     }
     default: { throw Exception("UDFHandler : Expression type not supported"); }
   }
